@@ -2,16 +2,19 @@ import torch
 import tqdm
 import numpy as np
 
-from discrete_choice.mnl import MultinomialLogit
+from discrete_choice.multinomial_logit import MultinomialLogit
 
 
 def test_mnl(mode_choice_dataset):
     feats, feat_mask, feat_scaler, labels, n_feats, n_alts = mode_choice_dataset
 
     model = MultinomialLogit(n_feats, n_alts, ref_alt=3)
-    optim = torch.optim.Adam(model.parameters(), lr=1e-2)
+    optim = torch.optim.Adam(model.parameters(), lr=1e-1)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optim, threshold=0.01, threshold_mode="rel", patience=40, min_lr=1e-4
+    )
 
-    progress_bar = tqdm.trange(1200)
+    progress_bar = tqdm.trange(1000)
     for epoch in progress_bar:
         model.train()
         optim.zero_grad()
@@ -21,8 +24,9 @@ def test_mnl(mode_choice_dataset):
 
         loss.backward()
         optim.step()
+        scheduler.step(loss)
 
-        progress_bar.set_postfix({"loss": loss.detach().item()})
+        progress_bar.set_postfix({"loss": loss.detach().item(), "lr": scheduler.get_last_lr()[0]})
 
     params = model.get_params()
 
