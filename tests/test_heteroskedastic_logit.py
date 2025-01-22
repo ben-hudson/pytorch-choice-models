@@ -18,10 +18,10 @@ def test_heteroskedastic_logit(mode_choice_dataset):
 
     optim = torch.optim.Adam(model.parameters(), lr=1e-1)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optim, threshold=0.01, threshold_mode="rel", patience=10, min_lr=1e-4
+        optim, threshold=0.01, threshold_mode="rel", patience=20, min_lr=1e-5
     )
 
-    progress_bar = tqdm.trange(100)
+    progress_bar = tqdm.trange(200)
     for epoch in progress_bar:
         model.train()
         optim.zero_grad()
@@ -44,5 +44,5 @@ def test_heteroskedastic_logit(mode_choice_dataset):
     ), f"log-likelihood was not close to value estimated by PyLogit - see {__file__} for details"
     # with the exception of the betas, the confidence intervals are so wide on the parameters that it doesn't make sense to check them
     assert np.isclose(
-        params["beta"] / feat_scaler.scale_, np.array([-0.0333, -0.1156, 0.0381]), rtol=0.2
+        params["beta"] / feat_scaler.scale_, np.array([-0.0333, -0.1156, 0.0381]), rtol=0.1
     ).all(), f"betas were not close to values estimated by PyLogit - see {__file__} for details"
