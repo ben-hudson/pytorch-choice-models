@@ -27,7 +27,7 @@ def test_multigraph_sp(random_strongly_connected_graph: nx.DiGraph):
     selected_edge_cost = random_strongly_connected_graph.edges[selected_edge]["cost"]
     multigraph.add_edge(*selected_edge, cost=selected_edge_cost * 0.9)
 
-    multigraph_path_edges = shortestpath_edges(multigraph, source, sink, weight="cost")
+    multigraph_path_edges, _ = shortestpath_edges(multigraph, source, sink, weight="cost")
 
     for a, (u, v, k) in zip(path_edges, multigraph_path_edges):
         b = u, v
