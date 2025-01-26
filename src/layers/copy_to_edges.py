@@ -14,7 +14,7 @@ class CopyToEdges(MessagePassing):
         super().__init__(aggr=None, flow=flow)
 
     def forward(self, x, edge_index):
-        # it's poorly documented, but there is a function self.edge_updater does something similar to self.propagate for edges
+        # it's poorly documented, but self.edge_updater does something similar to self.propagate for edges
         # where self.edge_update corresponds to self.message
         return self.edge_updater(edge_index, x=x)
 
