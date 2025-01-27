@@ -6,7 +6,7 @@ import torch_geometric.data
 import torch_geometric.utils
 
 from sklearn.preprocessing import StandardScaler
-from route_choice.utils import shortestpath_edges
+from typing import Any
 
 
 @pytest.fixture
@@ -72,33 +72,41 @@ def route_choice_dataset(route_choice_graph: nx.MultiDiGraph, request: pytest.Fi
     n_samples, seed = request  # .param
     rng = np.random.default_rng(seed)
 
+    # edge features
     feat_attrs = ["travel_time"]
     n_feats = len(feat_attrs)
 
     orig = "o"
     dest = "d"
+    # node features
     for n in route_choice_graph.nodes:
         route_choice_graph.nodes[n]["orig"] = n == orig
         route_choice_graph.nodes[n]["dest"] = n == dest
 
+    # deterministic util
     beta_tt = -2.0  # coefficient for travel time
     beta_lc = -0.01  # coefficient for link constant (penalizes number of links in a path)
+    for e in route_choice_graph.edges:
+        travel_time = route_choice_graph.edges[e]["travel_time"]
+        link_constant = 1
+        determ_util = beta_tt * travel_time + beta_lc * link_constant
+        route_choice_graph.edges[e]["determ_util"] = determ_util
+        route_choice_graph.edges[e]["cost"] = -determ_util  # min cost = max util
 
-    # now, generate the samples
+    # deterministic value
+    cost_to_go = nx.single_source_bellman_ford_path_length(route_choice_graph.reverse(), dest, weight="cost")
+    for n in route_choice_graph.nodes:
+        route_choice_graph.nodes[n]["cost_to_go"] = cost_to_go[n]
+        route_choice_graph.nodes[n]["value"] = -cost_to_go[n]
+
+    # now, sample paths
     samples = []
     for _ in range(n_samples):
         graph = route_choice_graph.copy()
 
+        path = _sample_path(graph, orig, dest, util_key="determ_util", value_key="value", seed=seed)
         for e in graph.edges:
-            travel_time = graph.edges[e]["travel_time"]
-            link_constant = 1
-            util = beta_tt * travel_time + beta_lc * link_constant + rng.gumbel(0, 1)
-            graph.edges[e]["util"] = util
-            graph.edges[e]["cost"] = -util  # min cost = max util
-
-        sp_edges, _ = shortestpath_edges(graph, orig, dest, weight="cost")
-        for e in graph.edges:
-            graph.edges[e]["choice"] = e in sp_edges
+            graph.edges[e]["choice"] = e in path
 
         torch_graph = torch_geometric.utils.from_networkx(graph, group_edge_attrs=feat_attrs)
         samples.append(torch_graph)
@@ -110,3 +118,26 @@ def route_choice_dataset(route_choice_graph: nx.MultiDiGraph, request: pytest.Fi
     batch.feats = torch.as_tensor(feats_scaled_np, dtype=torch.float32)
 
     return batch, feat_scaler, n_feats
+
+
+def _sample_path(
+    graph: nx.MultiDiGraph, orig: Any, dest: Any, util_key: str = "util", value_key: str = "value", seed: int = None
+):
+    assert graph.is_multigraph() and graph.is_directed(), "expected a directed multigraph"
+
+    rng = np.random.default_rng(seed)
+
+    path = []
+    n = orig
+    while n != dest:
+        util = {}
+        for u, v, k, determ_util in graph.out_edges(n, keys=True, data=util_key):
+            next_value = graph.nodes[v][value_key]
+            random_util = rng.gumbel(0, 1) - np.euler_gamma
+            util[u, v, k] = determ_util + next_value + random_util
+
+        edge = max(util, key=lambda k: util[k])
+        path.append(edge)
+        n = edge[1]
+
+    return path

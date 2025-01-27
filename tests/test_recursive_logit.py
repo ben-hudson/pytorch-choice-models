@@ -16,7 +16,7 @@ def test_recursive_logit(route_choice_dataset):
         optim, threshold=0.01, threshold_mode="rel", patience=40, min_lr=1e-4
     )
 
-    progress_bar = tqdm.trange(1000)
+    progress_bar = tqdm.trange(2000)
     for epoch in progress_bar:
         model.train()
         optim.zero_grad()
@@ -29,4 +29,5 @@ def test_recursive_logit(route_choice_dataset):
 
         progress_bar.set_postfix({"loss": loss.detach().item(), "lr": scheduler.get_last_lr()[0]})
 
+    params = model.get_params()
     assert True

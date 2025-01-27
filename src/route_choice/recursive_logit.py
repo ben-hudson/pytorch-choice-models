@@ -42,25 +42,28 @@ class RecursiveLogit(torch.nn.Module):
         self.message_passing = BellmanFordStep(aggr="max", flow="target_to_source")
         self.loss_fn = RecursiveLogitLoss(reduction=loss_reduction)
 
-    def forward(self, batch: torch_geometric.data.Batch):
+    def forward(
+        self, feats: torch.Tensor, dest_mask: torch.Tensor, batch_index: torch.Tensor, edge_index: torch.Tensor
+    ):
         # we get a batch of graphs, where each edge has a feature
         # first, we estimate the deterministic utility of each edge
         # then we calculate the value of each node using the message passing steps
-        util = self.coeffs(batch.feats)
+        util = self.coeffs(feats)
 
         # here we will get value of every edge
         # the value is the opposite of the cost to go
-        value = -torch.inf * torch.ones((batch.num_nodes, 1), dtype=torch.float32)
-        value[batch.dest] = 0.0
+        n_nodes = batch_index.size(0)
+        value = -torch.inf * torch.ones((n_nodes, 1), dtype=torch.float32)
+        value[dest_mask] = 0.0
 
         # need to propagate n_nodes - 1 times to converge
         # but the batch is many disconnected graphs, so we need to find the number of nodes in the largest one
-        _, node_counts = torch.unique(batch.batch, return_counts=True)
+        _, node_counts = torch.unique(batch_index, return_counts=True)
         n_steps = node_counts.max() - 1
         for _ in range(n_steps):
-            value = self.message_passing(value, util, batch.edge_index)
+            value = self.message_passing(value, util, edge_index)
         # if the values change after they should have converged, we have a cycle
-        cycle_check = self.message_passing(value, util, batch.edge_index)
+        cycle_check = self.message_passing(value, util, edge_index)
         assert (
             value == cycle_check
         ).all(), "values changed after they should have converged, indicating the graph contains a cycle"
@@ -68,6 +71,10 @@ class RecursiveLogit(torch.nn.Module):
         return value, util
 
     def train_step(self, batch: torch_geometric.data.Batch):
-        value, util = self.forward(batch)
+        value, util = self.forward(batch.feats, batch.dest, batch.batch, batch.edge_index)
         loss = self.loss_fn(value, util, batch.choice, batch.edge_index)
         return loss
+
+    def get_params(self):
+        params = dict(self.named_parameters())
+        return {"beta_tt": params["coeffs.weight"].detach(), "beta_lc": params["coeffs.bias"].detach()}
