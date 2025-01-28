@@ -23,14 +23,13 @@ class ExpValueIteration(MessagePassing):
         self,
         utils: torch.Tensor,
         edge_index: torch.Tensor,
-        num_nodes: int,
-        sink_node_index: int,
+        sink_node_mask: torch.Tensor,
         max_iters: int,
         eps: float = 1e-6,
     ):
         exp_utils = utils.exp()
-        exp_values = torch.zeros((num_nodes, 1), dtype=torch.float32)  # exp(-inf)
-        exp_values[sink_node_index] = 1.0  # exp(0)
+        exp_values = torch.zeros((sink_node_mask.size(0), 1), dtype=torch.float32)  # exp(-inf)
+        exp_values[sink_node_mask] = 1.0  # exp(0)
 
         n_iters = 0
         while n_iters < max_iters:
