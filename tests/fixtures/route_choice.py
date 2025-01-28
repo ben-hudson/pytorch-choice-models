@@ -27,6 +27,22 @@ def random_strongly_connected_graph(request: pytest.FixtureRequest):
     return G
 
 
+# https://arxiv.org/abs/1905.00883v2 figure 1, 2
+@pytest.fixture
+def small_network(request):
+    G = nx.MultiDiGraph()
+    G.add_nodes_from([1, 2, 3, 4])
+    G.add_edge(1, 2, cost=1)
+    G.add_edge(1, 4, cost=2)
+    G.add_edge(1, 4, cost=6)
+    G.add_edge(2, 3, cost=1.5)
+    G.add_edge(2, 4, cost=2)
+    G.add_edge(3, 4, cost=1.5)
+    if request.param.get("cyclic", False):
+        G.add_edge(3, 1, cost=1)
+    return G
+
+
 # https://arxiv.org/abs/1905.00883v2 figure 3
 @pytest.fixture
 def route_choice_graph():
@@ -69,7 +85,7 @@ def route_choice_graph():
 # https://arxiv.org/abs/1905.00883v2 section 5.1
 @pytest.fixture
 def route_choice_dataset(route_choice_graph: nx.MultiDiGraph, request: pytest.FixtureRequest):
-    n_samples, seed = request  # .param
+    n_samples, seed = request.param
     rng = np.random.default_rng(seed)
 
     # edge features
