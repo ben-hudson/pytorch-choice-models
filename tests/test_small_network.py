@@ -6,6 +6,7 @@ import torch_geometric.utils
 
 from layers.edge_prob import EdgeProb
 from layers.exp_value_iteration import ExpValueIteration
+from route_choice.utils import solve_bellman_lin_eqs
 
 
 @pytest.mark.parametrize("small_network", [{"cyclic": False}, {"cyclic": True}], indirect=True)
@@ -32,3 +33,15 @@ def test_values_and_probs(small_network: nx.MultiDiGraph):
     assert torch.isclose(
         prob.squeeze(), torch_graph.prob, atol=1e-4
     ).all(), f"edge probs did not match ({prob.squeeze()} vs {torch_graph.prob})"
+
+
+@pytest.mark.parametrize("small_network", [{"cyclic": False}, {"cyclic": True}], indirect=True)
+def test_values_lin_eq(small_network: nx.MultiDiGraph):
+    for u, v, k, cost in small_network.edges(keys=True, data="cost"):
+        small_network.edges[u, v, k]["util"] = -cost
+
+    values, node_list = solve_bellman_lin_eqs(small_network, util_key="util")
+    for value_n, n in zip(values, node_list):
+        assert np.isclose(
+            value_n, small_network.nodes[n]["value"], atol=1e-4
+        ), f"value did not match ({value_n} vs {small_network.nodes[n]['value']})"

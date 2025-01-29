@@ -1,4 +1,5 @@
 import networkx as nx
+import numpy as np
 
 from typing import Any
 
@@ -21,3 +22,20 @@ def shortestpath_edges(graph: nx.Graph, source: Any, target: Any, weight: str = 
         multigraph_path_length += shortest_edge[3]
 
     return multigraph_path_edges, multigraph_path_length
+
+
+def solve_bellman_lin_eqs(graph: nx.MultiDiGraph, util_key="util"):
+    for u, v, k, util in graph.edges(keys=True, data=util_key):
+        graph.edges[u, v, k]["exp_util"] = np.exp(util)  # exp happens before summing
+
+    # attr_matrix automatically sums values on parallel edges, which is what we want
+    M, node_list = nx.attr_matrix(graph, edge_attr="exp_util")
+
+    dest = node_list.index(4)
+
+    b = np.zeros_like(node_list, dtype=float)
+    b[dest] = 1.0
+    A = np.eye(M.shape[0]) - M
+    z = np.linalg.solve(A, b)
+    V = np.log(z)
+    return V, node_list
