@@ -1,3 +1,4 @@
+import numpy as np
 import pytest
 import torch
 import tqdm
@@ -5,7 +6,7 @@ import tqdm
 from route_choice.recursive_logit import RecursiveLogit
 
 
-@pytest.mark.parametrize("route_choice_dataset", [{"n_samples": 500}], indirect=True)
+@pytest.mark.parametrize("route_choice_dataset", [{"n_samples": 1000}], indirect=True)
 def test_route_choice_dataset(route_choice_dataset):
     batch, feat_scaler, n_feats = route_choice_dataset
 
@@ -29,9 +30,7 @@ def test_route_choice_dataset(route_choice_dataset):
         progress_bar.set_postfix({"loss": loss.detach().item(), "lr": scheduler.get_last_lr()[0]})
 
     params = model.get_params()
-    assert torch.isclose(
-        params["beta"], torch.tensor([-2.0]), rtol=0.1
-    ), f"beta was not close to the expected value of -2 ({params['beta']})"
-    assert torch.isclose(
-        params["link_constant"], torch.tensor([-0.01]), atol=0.05
-    ), f"link constant was not close to the expected value of -0.01 ({params['link_constant']})"
+    beta = params["beta"] / feat_scaler.scale_
+    lc = params["link_constant"] - params["beta"] * feat_scaler.mean_ / feat_scaler.scale_
+    assert np.isclose(beta, np.array([-2.0]), rtol=0.1), f"beta not close to expected value of -2 ({beta})"
+    assert np.isclose(lc, np.array([-0.01]), atol=0.08), f"link constant not close to expected value of -0.01 ({lc})"

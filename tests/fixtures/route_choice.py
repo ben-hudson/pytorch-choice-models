@@ -162,9 +162,8 @@ def route_choice_dataset(route_choice_graph: nx.MultiDiGraph, request: pytest.Fi
     batch = torch_geometric.data.Batch.from_data_list(samples)
 
     feat_scaler = StandardScaler()
-    # feats_scaled_np = feat_scaler.fit_transform(batch.edge_attr.numpy())
-    # batch.feats = torch.as_tensor(feats_scaled_np, dtype=torch.float32)
-    batch.feats = batch.edge_attr
+    feats_scaled_np = feat_scaler.fit_transform(batch.edge_attr.numpy())
+    batch.feats = torch.as_tensor(feats_scaled_np, dtype=torch.float32)
 
     return batch, feat_scaler, n_feats
 
