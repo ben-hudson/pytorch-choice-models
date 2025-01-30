@@ -119,6 +119,7 @@ def route_choice_graph():
 @pytest.fixture
 def route_choice_dataset(route_choice_graph: nx.MultiDiGraph, request: pytest.FixtureRequest):
     n_samples = request.param.get("n_samples", 500)
+    seed = request.param.get("seed", None)
 
     # edge features
     feat_attrs = ["travel_time"]
@@ -147,12 +148,13 @@ def route_choice_dataset(route_choice_graph: nx.MultiDiGraph, request: pytest.Fi
     edge_probs = get_edge_probs(route_choice_graph, util_key="determ_util", value_key="value")
     nx.set_edge_attributes(route_choice_graph, edge_probs, "prob")
 
-    # now, sample paths
+    # now, generate samples
+    paths = _sample_paths(route_choice_graph, orig, dest, n_samples, prob_key="prob", seed=seed)
+
     samples = []
-    for _ in range(n_samples):
+    for path in paths:
         graph = route_choice_graph.copy()
 
-        path = _sample_path(graph, orig, dest, prob_key="prob")
         for e in graph.edges:
             graph.edges[e]["choice"] = e in path
 
@@ -168,19 +170,26 @@ def route_choice_dataset(route_choice_graph: nx.MultiDiGraph, request: pytest.Fi
     return batch, feat_scaler, n_feats
 
 
-def _sample_path(graph: nx.MultiDiGraph, orig: Any, dest: Any, prob_key: str = "prob"):
+def _sample_paths(graph: nx.MultiDiGraph, orig: Any, dest: Any, n_samples: int, prob_key: str = "prob", seed=None):
     assert graph.is_multigraph() and graph.is_directed(), "expected a directed multigraph"
 
-    path = []
-    n = orig
-    while n != dest:
-        edges = []
-        probs = []
-        for u, v, k, prob in graph.out_edges(n, keys=True, data=prob_key):
-            edges.append((u, v, k))
-            probs.append(prob)
-        edge = random.choices(edges, weights=probs, k=1)[0]  # random.choices supports weights, random.choice does not
-        path.append(edge)
-        n = edge[1]
+    random.seed(seed)
 
-    return path
+    paths = []
+    for _ in range(n_samples):
+
+        path = []
+        n = orig
+        while n != dest:
+            edges = []
+            probs = []
+            for u, v, k, prob in graph.out_edges(n, keys=True, data=prob_key):
+                edges.append((u, v, k))
+                probs.append(prob)
+            edge = random.choices(edges, weights=probs, k=1)[0]  # random.choices supports weights, .choice does not
+            path.append(edge)
+            n = edge[1]
+
+        paths.append(path)
+
+    return paths
