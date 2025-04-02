@@ -1,6 +1,6 @@
+import numpy as np
 import torch
 import tqdm
-import numpy as np
 
 from discrete_choice.multinomial_logit import MultinomialLogit
 
@@ -34,10 +34,10 @@ def test_mnl(mode_choice_dataset):
     # https://github.com/timothyb0912/pylogit/blob/master/examples/notebooks/More%20Mixed%20Logit--Heteroskedasticity%20and%20Nesting.ipynb
     assert torch.isclose(
         loss, torch.tensor(199.128), rtol=0.001
-    ), f"log-likelihood was not close to value estimated by PyLogit - see test_mnl.py for details"
+    ), f"log-likelihood was not close to value estimated by PyLogit - see {__file__} for details"
     assert torch.isclose(
         params["asc"], torch.tensor([5.2074, 3.8690, 3.1632]), rtol=0.1
-    ).all(), "ASCs were not close to values estimated by PyLogit - see test_mnl.py for details"
+    ).all(), f"ASCs were not close to values estimated by PyLogit - see {__file__} for details"
     assert np.isclose(
         params["beta"] / feat_scaler.scale_, np.array([-0.0155, -0.0961, 0.0133]), rtol=0.1
-    ).all(), "betas were not close to values estimated by PyLogit - see test_mnl.py for details"
+    ).all(), f"betas were not close to values estimated by PyLogit - see {__file__} for details"

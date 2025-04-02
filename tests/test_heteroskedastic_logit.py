@@ -1,6 +1,6 @@
+import numpy as np
 import torch
 import tqdm
-import numpy as np
 
 from discrete_choice.heteroskedastic_logit import HeteroskedasticLogit
 
@@ -18,10 +18,10 @@ def test_heteroskedastic_logit(mode_choice_dataset):
 
     optim = torch.optim.Adam(model.parameters(), lr=1e-1)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optim, threshold=0.01, threshold_mode="rel", patience=10, min_lr=1e-4
+        optim, threshold=0.01, threshold_mode="rel", patience=20, min_lr=1e-5
     )
 
-    progress_bar = tqdm.trange(100)
+    progress_bar = tqdm.trange(200)
     for epoch in progress_bar:
         model.train()
         optim.zero_grad()
@@ -41,8 +41,8 @@ def test_heteroskedastic_logit(mode_choice_dataset):
     # https://github.com/timothyb0912/pylogit/blob/master/examples/notebooks/More%20Mixed%20Logit--Heteroskedasticity%20and%20Nesting.ipynb
     assert torch.isclose(
         loss, torch.tensor(195.7015), rtol=0.01
-    ), f"log-likelihood was not close to value estimated by PyLogit - see test_mnl.py for details"
+    ), f"log-likelihood was not close to value estimated by PyLogit - see {__file__} for details"
     # with the exception of the betas, the confidence intervals are so wide on the parameters that it doesn't make sense to check them
     assert np.isclose(
         params["beta"] / feat_scaler.scale_, np.array([-0.0333, -0.1156, 0.0381]), rtol=0.1
-    ).all(), "betas were not close to values estimated by PyLogit - see test_mnl.py for details"
+    ).all(), f"betas were not close to values estimated by PyLogit - see {__file__} for details"
