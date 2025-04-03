@@ -10,7 +10,7 @@ from route_choice.recursive_logit import RecursiveLogit
 def test_route_choice_dataset(route_choice_dataset):
     batch, feat_scaler, n_feats = route_choice_dataset
 
-    model = RecursiveLogit(n_feats, link_constant=True)
+    model = RecursiveLogit(n_feats, link_constant=True, use_value_iteration=False)
     optim = torch.optim.Adam(model.parameters(), lr=1e-1)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optim, threshold=1e-4, threshold_mode="rel", patience=100, min_lr=1e-4
