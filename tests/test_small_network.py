@@ -8,7 +8,7 @@ from layers import EdgeProb, ValueIterationSolver, FixedPointSolver
 
 
 @pytest.mark.parametrize("small_network", [{"cyclic": False}, {"cyclic": True}], indirect=True)
-def test_values_and_probs(small_network: nx.MultiDiGraph):
+def test_values_and_probs_vi(small_network: nx.MultiDiGraph):
     node_list = list(small_network.nodes)
     dest = len(node_list) - 1
 
@@ -34,17 +34,18 @@ def test_values_and_probs(small_network: nx.MultiDiGraph):
 
 
 @pytest.mark.parametrize("small_network", [{"cyclic": False}, {"cyclic": True}], indirect=True)
-def test_values_and_probs_lin_eq(small_network: nx.MultiDiGraph):
+def test_values_and_probs_lin_eqs(small_network: nx.MultiDiGraph):
     node_list = list(small_network.nodes)
     dest = len(node_list) - 1
 
     torch_graph = torch_geometric.utils.from_networkx(small_network)
     torch_graph.util = -torch_graph.cost.float().unsqueeze(1)
-    lin_eq = FixedPointSolver()
+    max_iters = 100
+    lin_eqs = FixedPointSolver(max_iters=max_iters)
     dest_mask = torch.zeros(torch_graph.num_nodes, dtype=torch.bool)
     dest_mask[dest] = True
     batch = torch.zeros(torch_graph.num_nodes, dtype=torch.int64)
-    value = lin_eq(torch_graph.util, torch_graph.edge_index, dest_mask, batch)
+    value = lin_eqs(torch_graph.util, torch_graph.edge_index, dest_mask, batch)
 
     assert torch.isclose(
         value.squeeze(), torch_graph.value, atol=1e-4

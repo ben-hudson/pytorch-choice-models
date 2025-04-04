@@ -6,11 +6,15 @@ import tqdm
 from route_choice.recursive_logit import RecursiveLogit
 
 
-@pytest.mark.parametrize("route_choice_dataset", [{"n_samples": 1000, "seed": 321}], indirect=True)
-def test_route_choice_dataset(route_choice_dataset):
+@pytest.mark.parametrize(
+    "route_choice_dataset,use_vi",
+    [({"n_samples": 1000, "seed": 321}, True), ({"n_samples": 1000, "seed": 321}, False)],
+    indirect=["route_choice_dataset"],
+)
+def test_route_choice_dataset(route_choice_dataset, use_vi):
     batch, feat_scaler, n_feats = route_choice_dataset
 
-    model = RecursiveLogit(n_feats, link_constant=True, use_value_iteration=False)
+    model = RecursiveLogit(n_feats, link_constant=True, use_value_iteration=use_vi)
     optim = torch.optim.Adam(model.parameters(), lr=1e-1)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optim, threshold=1e-4, threshold_mode="rel", patience=100, min_lr=1e-4
