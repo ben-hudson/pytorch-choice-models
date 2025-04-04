@@ -3,7 +3,7 @@ import torch
 from torch_geometric.nn import MessagePassing
 
 
-class ExpValueIteration(MessagePassing):
+class ValueIterationSolver(MessagePassing):
     def __init__(self, **kwargs):
         super().__init__(aggr="sum", flow="target_to_source", **kwargs)
 

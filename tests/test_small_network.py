@@ -4,7 +4,7 @@ import pytest
 import torch
 import torch_geometric.utils
 
-from layers import EdgeProb, ExpValueIteration, ExpLinearEquations
+from layers import EdgeProb, ValueIterationSolver, FixedPointSolver
 
 
 @pytest.mark.parametrize("small_network", [{"cyclic": False}, {"cyclic": True}], indirect=True)
@@ -14,7 +14,7 @@ def test_values_and_probs(small_network: nx.MultiDiGraph):
 
     torch_graph = torch_geometric.utils.from_networkx(small_network)
     torch_graph.util = -torch_graph.cost.float().unsqueeze(1)
-    value_iter = ExpValueIteration()
+    value_iter = ValueIterationSolver()
     max_iters = 100
     dest_mask = torch.zeros(torch_graph.num_nodes, dtype=torch.bool)
     dest_mask[dest] = True
@@ -40,7 +40,7 @@ def test_values_and_probs_lin_eq(small_network: nx.MultiDiGraph):
 
     torch_graph = torch_geometric.utils.from_networkx(small_network)
     torch_graph.util = -torch_graph.cost.float().unsqueeze(1)
-    lin_eq = ExpLinearEquations()
+    lin_eq = FixedPointSolver()
     dest_mask = torch.zeros(torch_graph.num_nodes, dtype=torch.bool)
     dest_mask[dest] = True
     batch = torch.zeros(torch_graph.num_nodes, dtype=torch.int64)

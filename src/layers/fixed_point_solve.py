@@ -3,7 +3,7 @@ import torchdeq
 import torch_geometric.utils
 
 
-class ExpLinearEquations(torch.nn.Module):
+class FixedPointSolver(torch.nn.Module):
     def __init__(self, solver: str = "broyden", max_iters: int = 20, eps: float = 1e-6, **kwargs):
         super().__init__()
         self.deq = torchdeq.get_deq(

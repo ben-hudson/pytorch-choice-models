@@ -3,7 +3,7 @@ import torch_geometric.nn
 import torch_geometric.data
 import torch_geometric.utils
 
-from layers import EdgeProb, ExpLinearEquations, ExpValueIteration
+from layers import EdgeProb, FixedPointSolver, ValueIterationSolver
 
 
 class RecursiveLogit(torch.nn.Module):
@@ -19,9 +19,9 @@ class RecursiveLogit(torch.nn.Module):
 
         self.use_value_iteration = use_value_iteration
         if self.use_value_iteration:
-            self.solver = ExpValueIteration()
+            self.solver = ValueIterationSolver()
         else:
-            self.solver = ExpLinearEquations()
+            self.solver = FixedPointSolver()
         self.edge_prob = EdgeProb()
 
     def forward(
