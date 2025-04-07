@@ -2,32 +2,21 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import pytest
-import random
 import torch
 import torch_geometric.data
 import torch_geometric.utils
 
-from route_choice.utils import solve_bellman_lin_eqs, get_edge_probs
+from route_choice.utils import get_edge_probs, random_strongly_connected_graph, sample_paths, solve_bellman_lin_eqs
 from sklearn.preprocessing import StandardScaler
-from typing import Any
 
 
 @pytest.fixture
-def random_strongly_connected_graph(request: pytest.FixtureRequest):
-    max_nodes, edge_prob, seed = request.param
+def random_graph(request: pytest.FixtureRequest):
+    max_nodes = request.param.get("max_nodes", 10)
+    edge_prob = request.param.get("edge_prob", 0.1)
+    seed = request.param.get("seed", None)
 
-    # generate a graph
-    H = nx.fast_gnp_random_graph(max_nodes, edge_prob, directed=True, seed=seed)
-    # find the largest component
-    largest_component = max(nx.strongly_connected_components(H), key=len)
-    assert len(largest_component) > 2, "largest component is trivial"
-
-    # take that component and add edge costs
-    G = H.subgraph(largest_component).copy()
-    node_pos = nx.spring_layout(G)
-    for i, j in G.edges:
-        G.edges[i, j]["cost"] = np.linalg.norm(node_pos[j] - node_pos[i])
-    return G
+    return random_strongly_connected_graph(max_nodes, edge_prob, seed)
 
 
 # https://arxiv.org/abs/1905.00883v2 figure 1
@@ -70,7 +59,7 @@ def small_cyclic_network():
 
 
 @pytest.fixture
-def small_network(request):
+def small_network(request: pytest.FixtureRequest):
     if request.param.get("cyclic", False):
         return small_cyclic_network()
     else:
@@ -149,6 +138,7 @@ def borlange_network():
 # https://arxiv.org/abs/1905.00883v2 section 5.1
 @pytest.fixture
 def rl_tutorial_dataset(rl_tutorial_network: nx.MultiDiGraph, request: pytest.FixtureRequest):
+    graph = rl_tutorial_network.copy()
     n_samples = request.param.get("n_samples", 500)
     seed = request.param.get("seed", None)
 
@@ -159,38 +149,42 @@ def rl_tutorial_dataset(rl_tutorial_network: nx.MultiDiGraph, request: pytest.Fi
     orig = "o"
     dest = "d"
     # node features
-    for n in rl_tutorial_network.nodes:
-        rl_tutorial_network.nodes[n]["orig"] = n == orig
-        rl_tutorial_network.nodes[n]["dest"] = n == dest
+    for n in graph.nodes:
+        graph.nodes[n]["orig"] = n == orig
+        graph.nodes[n]["dest"] = n == dest
 
     # deterministic util
     beta_tt = -2.0  # coefficient for travel time
     beta_lc = -0.01  # coefficient for link constant (penalizes number of links in a path)
-    for e in rl_tutorial_network.edges:
-        travel_time = rl_tutorial_network.edges[e]["travel_time"]
+    for e in graph.edges:
+        travel_time = graph.edges[e]["travel_time"]
         link_constant = 1
         determ_util = beta_tt * travel_time + beta_lc * link_constant
-        rl_tutorial_network.edges[e]["determ_util"] = determ_util
+        graph.edges[e]["determ_util"] = determ_util
 
     # deterministic value
-    values = solve_bellman_lin_eqs(rl_tutorial_network, dest, util_key="determ_util")
-    nx.set_node_attributes(rl_tutorial_network, values, "value")
+    values = solve_bellman_lin_eqs(graph, dest, util_key="determ_util")
+    nx.set_node_attributes(graph, values, "value")
 
-    edge_probs = get_edge_probs(rl_tutorial_network, util_key="determ_util", value_key="value")
-    nx.set_edge_attributes(rl_tutorial_network, edge_probs, "prob")
+    edge_probs = get_edge_probs(graph, util_key="determ_util", value_key="value")
+    nx.set_edge_attributes(graph, edge_probs, "prob")
 
     # now, generate samples
-    paths = _sample_paths(rl_tutorial_network, orig, dest, n_samples, prob_key="prob", seed=seed)
+    # we want to make sure the edge ordering doesn't change once converted to PyG, so store it
+    for i, e in enumerate(graph.edges):
+        graph.edges[e]["nx_edge_index"] = i
 
+    # this operation is slow so we only want to do it once
+    torch_graph = torch_geometric.utils.from_networkx(graph, group_edge_attrs=feat_attrs)
+
+    paths = sample_paths(graph, orig, dest, n_samples, prob_key="prob", seed=seed)
     samples = []
     for path in paths:
-        graph = rl_tutorial_network.copy()
+        sample = torch_graph.clone()
 
-        for e in graph.edges:
-            graph.edges[e]["choice"] = e in path
-
-        torch_graph = torch_geometric.utils.from_networkx(graph, group_edge_attrs=feat_attrs)
-        samples.append(torch_graph)
+        chosen_edges_mask = torch.as_tensor([e in path for e in graph.edges])  # convert path to mask
+        sample.choice = chosen_edges_mask[torch_graph.nx_edge_index]  # reindex according to PyG edge order
+        samples.append(sample)
 
     batch = torch_geometric.data.Batch.from_data_list(samples)
 
@@ -199,28 +193,3 @@ def rl_tutorial_dataset(rl_tutorial_network: nx.MultiDiGraph, request: pytest.Fi
     batch.feats = torch.as_tensor(feats_scaled_np, dtype=torch.float32)
 
     return batch, feat_scaler, n_feats
-
-
-def _sample_paths(graph: nx.MultiDiGraph, orig: Any, dest: Any, n_samples: int, prob_key: str = "prob", seed=None):
-    assert graph.is_multigraph() and graph.is_directed(), "expected a directed multigraph"
-
-    random.seed(seed)
-
-    paths = []
-    for _ in range(n_samples):
-
-        path = []
-        n = orig
-        while n != dest:
-            edges = []
-            probs = []
-            for u, v, k, prob in graph.out_edges(n, keys=True, data=prob_key):
-                edges.append((u, v, k))
-                probs.append(prob)
-            edge = random.choices(edges, weights=probs, k=1)[0]  # random.choices supports weights, .choice does not
-            path.append(edge)
-            n = edge[1]
-
-        paths.append(path)
-
-    return paths

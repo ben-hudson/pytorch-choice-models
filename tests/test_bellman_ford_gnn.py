@@ -1,5 +1,4 @@
 import networkx as nx
-import numpy as np
 import pytest
 import torch
 import torch_geometric.utils
@@ -8,16 +7,22 @@ from layers.bellman_ford import BellmanFordStep
 
 
 @pytest.mark.parametrize(
-    "random_strongly_connected_graph", [(10, 0.1, 123), (20, 0.2, 456), (30, 0.3, 789)], indirect=True
+    "random_graph",
+    [
+        {"max_nodes": 10, "edge_prob": 0.1, "seed": 123},
+        {"max_nodes": 20, "edge_prob": 0.2, "seed": 456},
+        {"max_nodes": 30, "edge_prob": 0.3, "seed": 789},
+    ],
+    indirect=True,
 )
-def test_cost_to_go(random_strongly_connected_graph: nx.DiGraph):
-    node_list = list(random_strongly_connected_graph.nodes)
+def test_cost_to_go(random_graph: nx.DiGraph):
+    node_list = list(random_graph.nodes)
     # the nodes in the random graph are not necessarily sequential
     # pytorch geometric does not support this, so we refer to the nodes by their index in node_list instead
     source = 0
-    dist_true = nx.single_source_dijkstra_path_length(random_strongly_connected_graph, node_list[source], weight="cost")
+    dist_true = nx.single_source_dijkstra_path_length(random_graph, node_list[source], weight="cost")
 
-    torch_graph = torch_geometric.utils.from_networkx(random_strongly_connected_graph)
+    torch_graph = torch_geometric.utils.from_networkx(random_graph)
     torch_graph.cost = torch_graph.cost.float().unsqueeze(1)
 
     dist = torch.inf * torch.ones((torch_graph.num_nodes, 1), dtype=torch.float32)
@@ -33,19 +38,25 @@ def test_cost_to_go(random_strongly_connected_graph: nx.DiGraph):
 
 
 @pytest.mark.parametrize(
-    "random_strongly_connected_graph", [(10, 0.1, 123), (20, 0.2, 456), (30, 0.3, 789)], indirect=True
+    "random_graph",
+    [
+        {"max_nodes": 10, "edge_prob": 0.1, "seed": 123},
+        {"max_nodes": 20, "edge_prob": 0.2, "seed": 456},
+        {"max_nodes": 30, "edge_prob": 0.3, "seed": 789},
+    ],
+    indirect=True,
 )
-def test_shortest_path(random_strongly_connected_graph: nx.DiGraph):
-    node_list = list(random_strongly_connected_graph.nodes)
+def test_shortest_path(random_graph: nx.DiGraph):
+    node_list = list(random_graph.nodes)
     # the nodes in the random graph are not necessarily sequential
     # pytorch geometric does not support this, so we refer to the nodes by their index in node_list instead
     source = 0
     sink = len(node_list) - 1
 
-    path_true = nx.shortest_path(random_strongly_connected_graph, node_list[source], node_list[sink], weight="cost")
+    path_true = nx.shortest_path(random_graph, node_list[source], node_list[sink], weight="cost")
     assert len(path_true) > 2, "path is trivial"
 
-    torch_graph = torch_geometric.utils.from_networkx(random_strongly_connected_graph)
+    torch_graph = torch_geometric.utils.from_networkx(random_graph)
     torch_graph.cost = torch_graph.cost.float().unsqueeze(1)
 
     # here we will get the cost to go from every node to the destination

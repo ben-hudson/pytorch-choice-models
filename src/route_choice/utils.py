@@ -1,5 +1,6 @@
 import networkx as nx
 import numpy as np
+import random
 import warnings
 
 from typing import Any
@@ -64,3 +65,43 @@ def get_edge_probs(graph: nx.MultiDiGraph, util_key: str = "util", value_key: st
             probs[e] = exp_logit / exp_logit_sum
 
     return probs
+
+
+def random_strongly_connected_graph(max_nodes, edge_prob, seed):
+    # generate a graph
+    H = nx.fast_gnp_random_graph(max_nodes, edge_prob, directed=True, seed=seed)
+    # find the largest component
+    largest_component = max(nx.strongly_connected_components(H), key=len)
+    assert len(largest_component) > 2, "largest component is trivial"
+
+    # take that component and add edge costs
+    G = H.subgraph(largest_component).copy()
+    node_pos = nx.spring_layout(G)
+    for i, j in G.edges:
+        G.edges[i, j]["cost"] = np.linalg.norm(node_pos[j] - node_pos[i])
+    return G
+
+
+def sample_paths(graph: nx.MultiDiGraph, orig: Any, dest: Any, n_samples: int, prob_key: str = "prob", seed=None):
+    assert graph.is_multigraph() and graph.is_directed(), "expected a directed multigraph"
+
+    random.seed(seed)
+
+    paths = []
+    for _ in range(n_samples):
+
+        path = []
+        n = orig
+        while n != dest:
+            edges = []
+            probs = []
+            for u, v, k, prob in graph.out_edges(n, keys=True, data=prob_key):
+                edges.append((u, v, k))
+                probs.append(prob)
+            edge = random.choices(edges, weights=probs, k=1)[0]  # random.choices supports weights, .choice does not
+            path.append(edge)
+            n = edge[1]
+
+        paths.append(path)
+
+    return paths
