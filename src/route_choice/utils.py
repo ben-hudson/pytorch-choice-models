@@ -1,5 +1,6 @@
 import networkx as nx
 import numpy as np
+import warnings
 
 from typing import Any
 
@@ -37,6 +38,9 @@ def solve_bellman_lin_eqs(graph: nx.MultiDiGraph, target: Any, util_key: str = "
     b[target_idx] = 1.0
     A = np.eye(M.shape[0]) - M
     z = np.linalg.solve(A, b)
+    if (z < 0).any():
+        warnings.warn("z has negative elements. This can happen when solving large matrices.")
+    z = z.clip(min=0)
     V = np.log(z)
 
     values = {n: v for n, v in zip(node_list, V)}

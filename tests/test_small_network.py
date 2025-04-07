@@ -5,6 +5,7 @@ import torch
 import torch_geometric.utils
 
 from layers import EdgeProb, ValueIterationSolver, FixedPointSolver
+from route_choice.utils import solve_bellman_lin_eqs, get_edge_probs
 
 
 @pytest.mark.parametrize("small_network", [{"cyclic": False}, {"cyclic": True}], indirect=True)
@@ -34,7 +35,7 @@ def test_values_and_probs_vi(small_network: nx.MultiDiGraph):
 
 
 @pytest.mark.parametrize("small_network", [{"cyclic": False}, {"cyclic": True}], indirect=True)
-def test_values_and_probs_lin_eqs(small_network: nx.MultiDiGraph):
+def test_values_and_probs_fixed_point(small_network: nx.MultiDiGraph):
     node_list = list(small_network.nodes)
     dest = len(node_list) - 1
 
@@ -57,3 +58,24 @@ def test_values_and_probs_lin_eqs(small_network: nx.MultiDiGraph):
     assert torch.isclose(
         prob.squeeze(), torch_graph.prob, atol=1e-4
     ).all(), f"edge probs did not match ({prob.squeeze()} vs {torch_graph.prob})"
+
+
+@pytest.mark.parametrize("small_network", [{"cyclic": False}, {"cyclic": True}], indirect=True)
+def test_values_and_probs_lin_eqs(small_network: nx.MultiDiGraph):
+    dest = 4
+
+    for u, v, k, cost in small_network.edges(keys=True, data="cost"):
+        small_network.edges[u, v, k]["util"] = -cost
+
+    values = solve_bellman_lin_eqs(small_network, dest, util_key="util")
+    for n, value in values.items():
+        assert np.isclose(
+            value, small_network.nodes[n]["value"], atol=1e-4
+        ), f"value did not match ({value} vs {small_network.nodes[n]['value']})"
+
+    nx.set_node_attributes(small_network, values, "value")
+    edge_probs = get_edge_probs(small_network, util_key="util", value_key="value")
+    for e, prob in edge_probs.items():
+        assert np.isclose(
+            prob, small_network.edges[e]["prob"], atol=1e-4
+        ), f"edge prob did not match ({prob} vs {small_network.edges[e]['prob']})"

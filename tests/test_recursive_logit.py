@@ -7,12 +7,12 @@ from route_choice.recursive_logit import RecursiveLogit
 
 
 @pytest.mark.parametrize(
-    "route_choice_dataset,use_vi",
+    "rl_tutorial_dataset,use_vi",
     [({"n_samples": 1000, "seed": 321}, True), ({"n_samples": 1000, "seed": 321}, False)],
-    indirect=["route_choice_dataset"],
+    indirect=["rl_tutorial_dataset"],
 )
-def test_route_choice_dataset(route_choice_dataset, use_vi):
-    batch, feat_scaler, n_feats = route_choice_dataset
+def test_rl_tutorial_dataset(rl_tutorial_dataset, use_vi):
+    batch, feat_scaler, n_feats = rl_tutorial_dataset
 
     model = RecursiveLogit(n_feats, link_constant=True, use_value_iteration=use_vi)
     optim = torch.optim.Adam(model.parameters(), lr=1e-1)

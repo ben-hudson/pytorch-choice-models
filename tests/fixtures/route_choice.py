@@ -1,5 +1,6 @@
 import networkx as nx
 import numpy as np
+import pandas as pd
 import pytest
 import random
 import torch
@@ -78,7 +79,7 @@ def small_network(request):
 
 # https://arxiv.org/abs/1905.00883v2 figure 3
 @pytest.fixture
-def route_choice_graph():
+def rl_tutorial_network():
     G = nx.MultiDiGraph()
     G.add_node("o", pos=(0, 0))
     G.add_node("A", pos=(1, 0))
@@ -115,9 +116,39 @@ def route_choice_graph():
     return G
 
 
+@pytest.fixture
+def borlange_network():
+    col_dtypes = {"from": int, "to": int, "val": float}
+
+    travel_time = pd.read_csv(
+        "data/ATTRIBUTEestimatedtime.txt", sep="\t", header=None, names=col_dtypes.keys(), dtype=col_dtypes
+    ).set_index(["from", "to"])
+
+    turn_angle = pd.read_fwf(
+        "data/ATTRIBUTEturnangles.txt", header=None, names=col_dtypes.keys(), dtype=col_dtypes
+    ).set_index(["from", "to"])
+
+    link_incidence = pd.read_fwf(
+        "data/linkIncidence.txt", header=None, names=col_dtypes.keys(), dtype=col_dtypes
+    ).set_index(["from", "to"])
+
+    link_incidence["travel_time"] = travel_time["val"]
+    link_incidence["turn_angle"] = turn_angle["val"]
+
+    LEFT_TURN_ANGLE = np.pi * 40 / 180
+    U_TURN_ANGLE = np.pi * 177 / 180
+    link_incidence["left_turn"] = (turn_angle["val"] >= LEFT_TURN_ANGLE) & (turn_angle["val"] < U_TURN_ANGLE)
+    link_incidence["u_turn"] = turn_angle["val"] >= U_TURN_ANGLE
+
+    edge_list = link_incidence.drop("val", axis=1).dropna().reset_index()
+
+    G = nx.from_pandas_edgelist(edge_list, source="from", target="to", edge_attr=True, create_using=nx.MultiDiGraph)
+    return G
+
+
 # https://arxiv.org/abs/1905.00883v2 section 5.1
 @pytest.fixture
-def route_choice_dataset(route_choice_graph: nx.MultiDiGraph, request: pytest.FixtureRequest):
+def rl_tutorial_dataset(rl_tutorial_network: nx.MultiDiGraph, request: pytest.FixtureRequest):
     n_samples = request.param.get("n_samples", 500)
     seed = request.param.get("seed", None)
 
@@ -128,32 +159,32 @@ def route_choice_dataset(route_choice_graph: nx.MultiDiGraph, request: pytest.Fi
     orig = "o"
     dest = "d"
     # node features
-    for n in route_choice_graph.nodes:
-        route_choice_graph.nodes[n]["orig"] = n == orig
-        route_choice_graph.nodes[n]["dest"] = n == dest
+    for n in rl_tutorial_network.nodes:
+        rl_tutorial_network.nodes[n]["orig"] = n == orig
+        rl_tutorial_network.nodes[n]["dest"] = n == dest
 
     # deterministic util
     beta_tt = -2.0  # coefficient for travel time
     beta_lc = -0.01  # coefficient for link constant (penalizes number of links in a path)
-    for e in route_choice_graph.edges:
-        travel_time = route_choice_graph.edges[e]["travel_time"]
+    for e in rl_tutorial_network.edges:
+        travel_time = rl_tutorial_network.edges[e]["travel_time"]
         link_constant = 1
         determ_util = beta_tt * travel_time + beta_lc * link_constant
-        route_choice_graph.edges[e]["determ_util"] = determ_util
+        rl_tutorial_network.edges[e]["determ_util"] = determ_util
 
     # deterministic value
-    values = solve_bellman_lin_eqs(route_choice_graph, dest, util_key="determ_util")
-    nx.set_node_attributes(route_choice_graph, values, "value")
+    values = solve_bellman_lin_eqs(rl_tutorial_network, dest, util_key="determ_util")
+    nx.set_node_attributes(rl_tutorial_network, values, "value")
 
-    edge_probs = get_edge_probs(route_choice_graph, util_key="determ_util", value_key="value")
-    nx.set_edge_attributes(route_choice_graph, edge_probs, "prob")
+    edge_probs = get_edge_probs(rl_tutorial_network, util_key="determ_util", value_key="value")
+    nx.set_edge_attributes(rl_tutorial_network, edge_probs, "prob")
 
     # now, generate samples
-    paths = _sample_paths(route_choice_graph, orig, dest, n_samples, prob_key="prob", seed=seed)
+    paths = _sample_paths(rl_tutorial_network, orig, dest, n_samples, prob_key="prob", seed=seed)
 
     samples = []
     for path in paths:
-        graph = route_choice_graph.copy()
+        graph = rl_tutorial_network.copy()
 
         for e in graph.edges:
             graph.edges[e]["choice"] = e in path
