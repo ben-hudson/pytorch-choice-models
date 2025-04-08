@@ -26,16 +26,25 @@ def shortestpath_edges(graph: nx.Graph, source: Any, target: Any, weight: str = 
     return multigraph_path_edges, multigraph_path_length
 
 
+def edge_data_iterator(G: nx.Graph, data_key: bool = True):
+    if G.is_multigraph():
+        for u, v, k, data in G.edges(keys=True, data=data_key):
+            yield (u, v, k), data
+    else:
+        for u, v, data in G.edges(data=data_key):
+            yield (u, v), data
+
+
 def solve_bellman_lin_eqs(graph: nx.MultiDiGraph, target: Any, util_key: str = "util"):
-    for u, v, k, util in graph.edges(keys=True, data=util_key):
-        graph.edges[u, v, k]["exp_util"] = np.exp(util)  # exp happens before summing
+    for e, util in edge_data_iterator(graph, data_key=util_key):
+        graph.edges[e]["exp_util"] = np.exp(util)  # exp happens before summing
 
     # attr_matrix automatically sums values on parallel edges, which is what we want
     M, node_list = nx.attr_matrix(graph, edge_attr="exp_util")
 
     target_idx = node_list.index(target)
 
-    b = np.zeros_like(node_list, dtype=float)
+    b = np.zeros(len(node_list), dtype=float)
     b[target_idx] = 1.0
     A = np.eye(M.shape[0]) - M
     z = np.linalg.solve(A, b)
@@ -43,6 +52,7 @@ def solve_bellman_lin_eqs(graph: nx.MultiDiGraph, target: Any, util_key: str = "
         warnings.warn("z has negative elements. This can happen when solving large matrices.")
     z = z.clip(min=0)
     V = np.log(z)
+    V[np.isinf(V)] = np.nan
 
     values = {n: v for n, v in zip(node_list, V)}
     return values
@@ -77,6 +87,7 @@ def random_strongly_connected_graph(max_nodes, edge_prob, seed):
     # take that component and add edge costs
     G = H.subgraph(largest_component).copy()
     node_pos = nx.spring_layout(G)
+    nx.set_node_attributes(G, node_pos, "pos")
     for i, j in G.edges:
         G.edges[i, j]["cost"] = np.linalg.norm(node_pos[j] - node_pos[i])
     return G
@@ -98,8 +109,10 @@ def sample_paths(graph: nx.MultiDiGraph, orig: Any, dest: Any, n_samples: int, p
             for u, v, k, prob in graph.out_edges(n, keys=True, data=prob_key):
                 edges.append((u, v, k))
                 probs.append(prob)
+
             edge = random.choices(edges, weights=probs, k=1)[0]  # random.choices supports weights, .choice does not
             path.append(edge)
+
             n = edge[1]
 
         paths.append(path)

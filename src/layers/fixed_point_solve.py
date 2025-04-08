@@ -4,7 +4,7 @@ import torch_geometric.utils
 
 
 class FixedPointSolver(torch.nn.Module):
-    def __init__(self, solver: str = "broyden", max_iters: int = 20, eps: float = 1e-6, **kwargs):
+    def __init__(self, solver: str = "fixed_point_iter", max_iters: int = 1000, eps: float = 1e-16, **kwargs):
         super().__init__()
         self.deq = torchdeq.get_deq(
             ift=True,
@@ -22,19 +22,18 @@ class FixedPointSolver(torch.nn.Module):
 
         # this automatically sums values on parallel edges, which is what we want
         M = torch_geometric.utils.to_dense_adj(edge_index, batch=batch, edge_attr=exp_utils.squeeze())
-        b, real_node_mask = torch_geometric.utils.to_dense_batch(sink_node_mask, batch=batch, fill_value=torch.nan)
+        b, real_node_mask = torch_geometric.utils.to_dense_batch(sink_node_mask, batch=batch, fill_value=False)
 
         batch_size, n_nodes = b.shape
-        I = torch.eye(n_nodes).expand(batch_size, -1, -1)
-        A = I - M
         b = b.float().unsqueeze(-1)  # convert to a batch of column vectors
 
-        # we want to solve Az - b = f(z) = 0, but torchdeq solves f(z) = z
-        # So we need to add z on the right hand side, i.e. Az - b + z = z
-        f = lambda z: torch.bmm(A, z) - b + z
+        # we want to solve Mz + b = f(z) = z
+        # See https://www.sciencedirect.com/science/article/pii/S0191261513001276
+        f = lambda z: torch.bmm(M, z) + b
         z_0 = torch.ones(batch_size, n_nodes, 1)
         z_out, info = self.deq(f, z_0)
         # for our setup, there is always one element in z_out
         z = z_out[-1]
-        V = z[real_node_mask].log()
+        V = z[real_node_mask].clamp(min=0).log()
+        V = V.masked_fill(torch.isinf(V), torch.nan)
         return V

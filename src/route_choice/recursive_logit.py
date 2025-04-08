@@ -1,7 +1,5 @@
 import torch
-import torch_geometric.nn
 import torch_geometric.data
-import torch_geometric.utils
 
 from layers import EdgeProb, FixedPointSolver, ValueIterationSolver
 
