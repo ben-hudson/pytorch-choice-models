@@ -62,19 +62,18 @@ def solve_bellman_lin_eqs(graph: nx.MultiDiGraph, target: Any, util_key: str = "
             util = -util
         graph.edges[e]["exp_util"] = np.exp(util)  # exp happens before summing
 
-    # attr_matrix automatically sums values on parallel edges, which is what we want
-    attr_matrix, node_list = nx.attr_matrix(graph, edge_attr="exp_util")
-    M = torch.as_tensor(attr_matrix)
+    M, node_list = nx.attr_matrix(graph, edge_attr="exp_util")
 
     target_idx = node_list.index(target)
-    b = torch.zeros(len(node_list)).type_as(M)
+
+    b = np.zeros(len(node_list), dtype=float)
     b[target_idx] = 1.0
+    A = np.eye(M.shape[0]) - M
+    z = np.linalg.solve(A, b).clip(min=0)
+    V = np.log(z)
+    V[np.isinf(V)] = np.nan
 
-    z, _, _ = linear_fp_solver(M.unsqueeze(0), b.unsqueeze(0))
-    V = z.squeeze().clamp(min=0).log()
-    V = V.masked_fill(torch.isinf(V), torch.nan)
-
-    values = {n: v for n, v in zip(node_list, V.numpy())}
+    values = {n: v for n, v in zip(node_list, V)}
     return values
 
 

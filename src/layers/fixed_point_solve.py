@@ -30,7 +30,8 @@ class FixedPointSolver(torch.nn.Module):
         # we want to solve Mz + b = f(z) = z
         # See https://www.sciencedirect.com/science/article/pii/S0191261513001276
         f = lambda z: torch.bmm(M, z) + b
-        z_0 = torch.ones(batch_size, n_nodes, 1).type_as(M)
+        # the solution is basically 1 at the destination node and less than 1 everywhere else, so b is a good starting point
+        z_0 = b.clone()
         z_out, info = self.deq(f, z_0)
         # for our setup, there is always one element in z_out
         z = z_out[-1]
