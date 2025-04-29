@@ -25,12 +25,12 @@ class FixedPointSolver(torch.nn.Module):
         b, real_node_mask = torch_geometric.utils.to_dense_batch(sink_node_mask, batch=batch, fill_value=False)
 
         batch_size, n_nodes = b.shape
-        b = b.float().unsqueeze(-1)  # convert to a batch of column vectors
+        b = b.unsqueeze(-1).type_as(M)  # convert to a batch of column vectors
 
         # we want to solve Mz + b = f(z) = z
         # See https://www.sciencedirect.com/science/article/pii/S0191261513001276
         f = lambda z: torch.bmm(M, z) + b
-        z_0 = torch.ones(batch_size, n_nodes, 1)
+        z_0 = torch.ones(batch_size, n_nodes, 1).type_as(M)
         z_out, info = self.deq(f, z_0)
         # for our setup, there is always one element in z_out
         z = z_out[-1]

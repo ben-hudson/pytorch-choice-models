@@ -1,7 +1,8 @@
 import networkx as nx
 import numpy as np
 import random
-import warnings
+import torch
+import torchdeq
 
 from typing import Any
 
@@ -35,26 +36,45 @@ def edge_data_iterator(G: nx.Graph, data_key: bool = True):
             yield (u, v), data
 
 
-def solve_bellman_lin_eqs(graph: nx.MultiDiGraph, target: Any, util_key: str = "util"):
+# solve the system Mz + b = z
+def linear_fp_solver(M: torch.Tensor, b: torch.Tensor, use_numpy: bool = False):
+    n_nodes = b.size(-1)
+
+    func = lambda z: torch.bmm(M, z.unsqueeze(2)).squeeze(2) + b
+
+    if use_numpy:
+        A_np = np.eye(n_nodes) - M.numpy()
+        b_np = b.numpy()
+        z_np = np.linalg.solve(A_np, b_np)
+        z = torch.as_tensor(z_np).type_as(M)
+    else:
+        A = torch.eye(n_nodes) - M
+        z, info = torch.linalg.solve_ex(A, b)
+
+    indexing_list = []
+    info = torchdeq.solver_stat_from_final_step(z, func(z))
+    return z, indexing_list, info
+
+
+def solve_bellman_lin_eqs(graph: nx.MultiDiGraph, target: Any, util_key: str = "util", is_neg: bool = False):
     for e, util in edge_data_iterator(graph, data_key=util_key):
+        if is_neg:
+            util = -util
         graph.edges[e]["exp_util"] = np.exp(util)  # exp happens before summing
 
     # attr_matrix automatically sums values on parallel edges, which is what we want
-    M, node_list = nx.attr_matrix(graph, edge_attr="exp_util")
+    attr_matrix, node_list = nx.attr_matrix(graph, edge_attr="exp_util")
+    M = torch.as_tensor(attr_matrix)
 
     target_idx = node_list.index(target)
-
-    b = np.zeros(len(node_list), dtype=float)
+    b = torch.zeros(len(node_list)).type_as(M)
     b[target_idx] = 1.0
-    A = np.eye(M.shape[0]) - M
-    z = np.linalg.solve(A, b)
-    if (z < 0).any():
-        warnings.warn("z has negative elements. This can happen when solving large matrices.")
-    z = z.clip(min=0)
-    V = np.log(z)
-    V[np.isinf(V)] = np.nan
 
-    values = {n: v for n, v in zip(node_list, V)}
+    z, _, _ = linear_fp_solver(M.unsqueeze(0), b.unsqueeze(0))
+    V = z.squeeze().clamp(min=0).log()
+    V = V.masked_fill(torch.isinf(V), torch.nan)
+
+    values = {n: v for n, v in zip(node_list, V.numpy())}
     return values
 
 
@@ -118,3 +138,12 @@ def sample_paths(graph: nx.MultiDiGraph, orig: Any, dest: Any, n_samples: int, p
         paths.append(path)
 
     return paths
+
+
+def get_turn_angle(in_bearing, out_bearing):
+    turn_angle = out_bearing - in_bearing
+    if turn_angle > 180:
+        turn_angle -= 360
+    elif turn_angle < -180:
+        turn_angle += 360
+    return turn_angle
