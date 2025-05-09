@@ -27,15 +27,6 @@ def shortestpath_edges(graph: nx.Graph, source: Any, target: Any, weight: str = 
     return multigraph_path_edges, multigraph_path_length
 
 
-def edge_data_iterator(G: nx.Graph, data_key: bool = True):
-    if G.is_multigraph():
-        for u, v, k, data in G.edges(keys=True, data=data_key):
-            yield (u, v, k), data
-    else:
-        for u, v, data in G.edges(data=data_key):
-            yield (u, v), data
-
-
 # solve the system Mz + b = z
 def linear_fp_solver(M: torch.Tensor, b: torch.Tensor, use_numpy: bool = False):
     n_nodes = b.size(-1)
@@ -57,9 +48,11 @@ def linear_fp_solver(M: torch.Tensor, b: torch.Tensor, use_numpy: bool = False):
 
 
 def solve_bellman_lin_eqs(graph: nx.MultiDiGraph, target: Any, util_key: str = "util", is_neg: bool = False):
-    for e, util in edge_data_iterator(graph, data_key=util_key):
+    edges = graph.edges(keys=True) if graph.is_multigraph() else graph.edges
+    for e in edges:
+        util = graph.edges[e][util_key]
         if is_neg:
-            util = -util
+            util *= -1
         graph.edges[e]["exp_util"] = np.exp(util)  # exp happens before summing
 
     M, node_list = nx.attr_matrix(graph, edge_attr="exp_util")
@@ -112,29 +105,42 @@ def random_strongly_connected_graph(max_nodes, edge_prob, seed):
     return G
 
 
-def sample_paths(graph: nx.MultiDiGraph, orig: Any, dest: Any, n_samples: int, prob_key: str = "prob", seed=None):
-    assert graph.is_multigraph() and graph.is_directed(), "expected a directed multigraph"
-
-    random.seed(seed)
+def sample_paths(
+    graph: nx.MultiDiGraph,
+    orig: Any,
+    dest: Any,
+    util_key: str,
+    value_key: str,
+    n_samples: int,
+    max_length: int = 100,
+    noise_scale: float = 1,
+    seed=None,
+):
+    rng = np.random.default_rng(seed)
 
     paths = []
     for _ in range(n_samples):
 
         path = []
         n = orig
-        while n != dest:
-            edges = []
-            probs = []
-            for u, v, k, prob in graph.out_edges(n, keys=True, data=prob_key):
-                edges.append((u, v, k))
-                probs.append(prob)
+        while n != dest and len(graph.out_edges(n)) > 0 and len(path) < max_length:
 
-            edge = random.choices(edges, weights=probs, k=1)[0]  # random.choices supports weights, .choice does not
-            path.append(edge)
+            alts = {}
+            # I HATE how you have to explicitly pass keys=True to a multigraph but c'est la vie
+            out_edges = graph.out_edges(n, keys=True) if graph.is_multigraph() else graph.out_edges(n)
+            for e in out_edges:
+                util = graph.edges[e][util_key]
+                value = graph.nodes[e[1]][value_key]
+                noise = noise_scale * (rng.gumbel(0, 1) - np.euler_gamma)
+                alts[e] = util + value + noise
 
-            n = edge[1]
+            choice, _ = max(alts.items(), key=lambda item: item[1])
+            path.append(choice)
 
-        paths.append(path)
+            n = choice[1]
+
+        if n == dest:
+            paths.append(path)
 
     return paths
 

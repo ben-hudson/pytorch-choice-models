@@ -8,7 +8,7 @@ from route_choice.recursive_logit import RecursiveLogit
 
 @pytest.mark.parametrize(
     "rl_tutorial_dataset,use_vi",
-    [({"n_samples": 1000, "seed": 321}, True), ({"n_samples": 1000, "seed": 321}, False)],
+    [({"n_samples": 1000, "seed": 123}, True), ({"n_samples": 1000, "seed": 123}, False)],
     indirect=["rl_tutorial_dataset"],
 )
 def test_rl_tutorial_dataset(rl_tutorial_dataset, use_vi):

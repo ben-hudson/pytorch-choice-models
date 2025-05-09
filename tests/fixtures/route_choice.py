@@ -6,7 +6,7 @@ import torch
 import torch_geometric.data
 import torch_geometric.utils
 
-from route_choice.utils import get_edge_probs, random_strongly_connected_graph, sample_paths, solve_bellman_lin_eqs
+from route_choice.utils import random_strongly_connected_graph, sample_paths, solve_bellman_lin_eqs
 from sklearn.preprocessing import StandardScaler
 
 
@@ -166,9 +166,6 @@ def rl_tutorial_dataset(rl_tutorial_network: nx.MultiDiGraph, request: pytest.Fi
     values = solve_bellman_lin_eqs(graph, dest, util_key="determ_util")
     nx.set_node_attributes(graph, values, "value")
 
-    edge_probs = get_edge_probs(graph, util_key="determ_util", value_key="value")
-    nx.set_edge_attributes(graph, edge_probs, "prob")
-
     # now, generate samples
     # we want to make sure the edge ordering doesn't change once converted to PyG, so store it
     for i, e in enumerate(graph.edges):
@@ -177,7 +174,7 @@ def rl_tutorial_dataset(rl_tutorial_network: nx.MultiDiGraph, request: pytest.Fi
     # this operation is slow so we only want to do it once
     torch_graph = torch_geometric.utils.from_networkx(graph, group_edge_attrs=feat_attrs)
 
-    paths = sample_paths(graph, orig, dest, n_samples, prob_key="prob", seed=seed)
+    paths = sample_paths(graph, orig, dest, "determ_util", "value", n_samples, seed=seed)
     samples = []
     for path in paths:
         sample = torch_graph.clone()
