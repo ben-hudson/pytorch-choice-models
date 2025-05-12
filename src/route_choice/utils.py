@@ -4,7 +4,7 @@ import random
 import torch
 import torchdeq
 
-from typing import Any
+from typing import Any, Union
 
 
 def shortestpath_edges(graph: nx.Graph, source: Any, target: Any, weight: str = "weight", method: str = "bellman-ford"):
@@ -47,7 +47,9 @@ def linear_fp_solver(M: torch.Tensor, b: torch.Tensor, use_numpy: bool = False):
     return z, indexing_list, info
 
 
-def solve_bellman_lin_eqs(graph: nx.MultiDiGraph, target: Any, util_key: str = "util", is_neg: bool = False):
+def solve_bellman_lin_eqs(
+    graph: Union[nx.DiGraph, nx.MultiDiGraph], target: Any, util_key: str = "util", is_neg: bool = False
+):
     edges = graph.edges(keys=True) if graph.is_multigraph() else graph.edges
     for e in edges:
         util = graph.edges[e][util_key]
@@ -89,22 +91,6 @@ def get_edge_probs(graph: nx.MultiDiGraph, util_key: str = "util", value_key: st
     return probs
 
 
-def random_strongly_connected_graph(max_nodes, edge_prob, seed):
-    # generate a graph
-    H = nx.fast_gnp_random_graph(max_nodes, edge_prob, directed=True, seed=seed)
-    # find the largest component
-    largest_component = max(nx.strongly_connected_components(H), key=len)
-    assert len(largest_component) > 2, "largest component is trivial"
-
-    # take that component and add edge costs
-    G = H.subgraph(largest_component).copy()
-    node_pos = nx.spring_layout(G)
-    nx.set_node_attributes(G, node_pos, "pos")
-    for i, j in G.edges:
-        G.edges[i, j]["cost"] = np.linalg.norm(node_pos[j] - node_pos[i])
-    return G
-
-
 def sample_paths(
     graph: nx.MultiDiGraph,
     orig: Any,
@@ -143,12 +129,3 @@ def sample_paths(
             paths.append(path)
 
     return paths
-
-
-def get_turn_angle(in_bearing, out_bearing):
-    turn_angle = out_bearing - in_bearing
-    if turn_angle > 180:
-        turn_angle -= 360
-    elif turn_angle < -180:
-        turn_angle += 360
-    return turn_angle

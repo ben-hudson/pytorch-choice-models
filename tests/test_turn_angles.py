@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from route_choice.utils import get_turn_angle
+from route_choice.data import get_turn_angle
 
 
 # clockwise is positive rotation

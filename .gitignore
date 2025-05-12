@@ -172,5 +172,5 @@ cython_debug/
 
 # Added by Ben
 .vscode
-data/
-cache/
+/data
+/cache
