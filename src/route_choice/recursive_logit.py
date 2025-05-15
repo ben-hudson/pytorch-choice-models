@@ -43,7 +43,7 @@ class RecursiveLogit(torch.nn.Module):
         return value, util, prob
 
     def train_step(self, batch: torch_geometric.data.Batch, loss_reduction: str = "mean"):
-        value, util, prob = self.forward(batch.feats, batch.dest, batch.edge_index, batch.batch, batch.num_nodes)
+        value, util, prob = self.forward(batch.feats, batch.is_dest, batch.edge_index, batch.batch, batch.num_nodes)
         # now to compute the loss of prob wrt to choice
         nll = -torch.log(prob[batch.choice])
         if loss_reduction == "mean":

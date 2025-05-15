@@ -5,7 +5,7 @@ import torch
 import torch_geometric.utils
 
 from layers import EdgeProb, ValueIterationSolver, FixedPointSolver
-from route_choice.utils import solve_bellman_lin_eqs, get_edge_probs
+from route_choice.data.utils import compute_values_probs_flows, normalize_attrs
 
 
 @pytest.mark.parametrize("small_network", [{"cyclic": False}, {"cyclic": True}], indirect=True)
@@ -26,7 +26,7 @@ def test_values_and_probs_vi(small_network: nx.MultiDiGraph):
         value.squeeze(), torch_graph.value, atol=1e-4
     ).all(), f"values did not match ({value.squeeze()} vs {torch_graph.value})"
 
-    edge_prob = EdgeProb()
+    edge_prob = EdgeProb(node_dim=0)
     prob = edge_prob(value, torch_graph.util, torch_graph.edge_index)
 
     assert torch.isclose(
@@ -36,46 +36,61 @@ def test_values_and_probs_vi(small_network: nx.MultiDiGraph):
 
 @pytest.mark.parametrize("small_network", [{"cyclic": False}, {"cyclic": True}], indirect=True)
 def test_values_and_probs_fixed_point(small_network: nx.MultiDiGraph):
-    node_list = list(small_network.nodes)
-    dest = len(node_list) - 1
+    source_graph, state_graph, orig, dest = small_network
 
-    torch_graph = torch_geometric.utils.from_networkx(small_network)
-    torch_graph.util = -torch_graph.cost.float().unsqueeze(1)
-    max_iters = 100
-    lin_eqs = FixedPointSolver(max_iters=max_iters)
-    dest_mask = torch.zeros(torch_graph.num_nodes, dtype=torch.bool)
-    dest_mask[dest] = True
+    normalize_attrs(state_graph, on="nodes", attrs_to_keep="all")
+    normalize_attrs(state_graph, on="edges", attrs_to_keep="all")
+    for i, n in enumerate(state_graph.nodes):
+        state_graph.nodes[n]["nx_node_index"] = i
+    torch_graph = torch_geometric.utils.from_networkx(state_graph)
     batch = torch.zeros(torch_graph.num_nodes, dtype=torch.int64)
-    value = lin_eqs(torch_graph.util, torch_graph.edge_index, dest_mask, batch)
 
-    assert torch.isclose(
-        value.squeeze(), torch_graph.value, atol=1e-4
-    ).all(), f"values did not match ({value.squeeze()} vs {torch_graph.value})"
+    lin_eqs = FixedPointSolver(max_iters=100)
+    edge_prob = EdgeProb(node_dim=0)
 
-    edge_prob = EdgeProb()
-    prob = edge_prob(value, torch_graph.util, torch_graph.edge_index)
+    values = lin_eqs(torch_graph.util, torch_graph.edge_index, torch_graph.is_dest, batch)
+    probs = edge_prob(values, torch_graph.util, torch_graph.edge_index)
 
-    assert torch.isclose(
-        prob.squeeze(), torch_graph.prob, atol=1e-4
-    ).all(), f"edge probs did not match ({prob.squeeze()} vs {torch_graph.prob})"
+    # to get the corresponding node value we have to index torch_graph -> state_graph -> source_graph
+    state_list = list(state_graph.nodes)
+    for i in range(torch_graph.num_nodes):
+        # skip the dummy nodes because they don't exist in source_graph
+        if not torch_graph.is_dummy[i]:
+            # first we find the index of the node in state_graph
+            state_idx = torch_graph.nx_node_index[i]
+            # then we find the destination node of the state, which is an edge in the source graph
+            n = state_list[state_idx][1]
+            # finally we can retrieve the node value
+            node_value = source_graph.nodes[n]["value"]
+            assert torch.isclose(values[i], torch.as_tensor(node_value), atol=1e-4)
+
+    # now for the transition probabilities, same idea
+    for i in range(torch_graph.num_nodes):
+        if not torch_graph.is_dummy[i]:
+            state_idx = torch_graph.nx_node_index[i]
+            e = state_list[state_idx]
+            edge_prob = source_graph.edges[e]["prob"]
+
+            p = torch_geometric.utils.mask_select(probs, -1, torch_graph.edge_index[1] == i)
+            assert torch.isclose(p, torch.as_tensor(edge_prob), atol=1e-4).all()
 
 
 @pytest.mark.parametrize("small_network", [{"cyclic": False}, {"cyclic": True}], indirect=True)
 def test_values_and_probs_lin_eqs(small_network: nx.MultiDiGraph):
-    dest = 4
+    source_graph, state_graph, orig, dest = small_network
 
-    for u, v, k, cost in small_network.edges(keys=True, data="cost"):
-        small_network.edges[u, v, k]["util"] = -cost
+    M, state_list = nx.attr_matrix(state_graph, "M")
+    V, P, F = compute_values_probs_flows(M, state_list.index(orig), state_list.index(dest))
 
-    values = solve_bellman_lin_eqs(small_network, dest, util_key="util")
-    for n, value in values.items():
-        assert np.isclose(
-            value, small_network.nodes[n]["value"], atol=1e-4
-        ), f"value did not match ({value} vs {small_network.nodes[n]['value']})"
+    # the states are edges in the source graph
+    for n, value in source_graph.nodes(data="value"):
+        # the value of the edges going in to the node should be equal to the value of the node
+        for u, v, k in source_graph.in_edges(n, keys=True):
+            i = state_list.index((u, v, k))
+            assert np.isclose(value, V[i], atol=1e-4), f"value {n} did not match {u, v, k} ({value} vs {V[i]})"
 
-    nx.set_node_attributes(small_network, values, "value")
-    edge_probs = get_edge_probs(small_network, util_key="util", value_key="value")
-    for e, prob in edge_probs.items():
-        assert np.isclose(
-            prob, small_network.edges[e]["prob"], atol=1e-4
-        ), f"edge prob did not match ({prob} vs {small_network.edges[e]['prob']})"
+    for u, v, k, prob in source_graph.edges(keys=True, data="prob"):
+        # the transition probabilities going into the edge should be equal to the probability of that edge
+        i = state_list.index((u, v, k))
+        is_close = np.isclose(prob, P[:, i], atol=1e-4) | (P[:, i] == 0)
+        assert is_close.all(), f"prob {u, v, k} did not match ({prob} vs {P[:, i]})"
