@@ -14,27 +14,6 @@ from sklearn.preprocessing import StandardScaler
 
 
 @pytest.fixture
-def random_strongly_connected_graph(request: pytest.FixtureRequest):
-    max_nodes = request.param.get("max_nodes", 10)
-    edge_prob = request.param.get("edge_prob", 0.1)
-    seed = request.param.get("seed", None)
-
-    # generate a graph
-    H = nx.fast_gnp_random_graph(max_nodes, edge_prob, directed=True, seed=seed)
-    # find the largest component
-    largest_component = max(nx.strongly_connected_components(H), key=len)
-    assert len(largest_component) > 2, "largest component is trivial"
-
-    # take that component and add edge costs
-    G = H.subgraph(largest_component).copy()
-    node_pos = nx.spring_layout(G)
-    nx.set_node_attributes(G, node_pos, "pos")
-    for i, j in G.edges:
-        G.edges[i, j]["cost"] = np.linalg.norm(node_pos[j] - node_pos[i])
-    return G
-
-
-@pytest.fixture
 def small_network(request: pytest.FixtureRequest):
     if request.param.get("cyclic", False):
         source_graph = load_small_cyclic_network()
