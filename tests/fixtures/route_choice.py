@@ -14,7 +14,7 @@ from sklearn.preprocessing import StandardScaler
 
 
 @pytest.fixture
-def random_graph(request: pytest.FixtureRequest):
+def random_strongly_connected_graph(request: pytest.FixtureRequest):
     max_nodes = request.param.get("max_nodes", 10)
     edge_prob = request.param.get("edge_prob", 0.1)
     seed = request.param.get("seed", None)

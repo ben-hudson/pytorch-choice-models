@@ -20,7 +20,7 @@ def test_rl_tutorial_dataset(rl_tutorial_dataset, use_vi):
     model = RecursiveLogit(n_feats, link_constant=True, use_value_iteration=use_vi)
     optim = torch.optim.Adam(model.parameters(), lr=1e-1)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optim, threshold=1e-4, threshold_mode="rel", patience=100, min_lr=1e-4
+        optim, threshold=1e-4, threshold_mode="rel", patience=50, min_lr=1e-4
     )
 
     for epoch in tqdm.trange(200):
