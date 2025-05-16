@@ -9,7 +9,19 @@ authors = [
     {name = "Ben Hudson", email = "benhudson@fastmail.com"}
 ]
 license = {file = "LICENSE"}
-dependencies = []
+dependencies = [
+    "matplotlib",
+    "networkx",
+    "numpy",
+    "osmnx",
+    "pytest-cov",
+    "pytest",
+    "scikit-learn",
+    "statsmodels",
+    "torch_geometric",
+    "torch",
+    "torchdeq",
+]
 
 [tool.setuptools_scm]
 version_scheme = "guess-next-dev"
