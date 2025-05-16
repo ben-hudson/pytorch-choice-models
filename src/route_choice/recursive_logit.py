@@ -1,7 +1,7 @@
 import torch
 import torch_geometric.data
 
-from layers import EdgeProb, FixedPointSolver, ValueIterationSolver
+from .layers import EdgeProb, FixedPointSolver, ValueIterationSolver
 
 
 class RecursiveLogit(torch.nn.Module):

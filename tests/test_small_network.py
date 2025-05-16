@@ -4,7 +4,7 @@ import pytest
 import torch
 import torch_geometric.utils
 
-from layers import EdgeProb, ValueIterationSolver, FixedPointSolver
+from route_choice.layers import EdgeProb, ValueIterationSolver, FixedPointSolver
 from route_choice.data.utils import compute_values_probs_flows, normalize_attrs
 
 
