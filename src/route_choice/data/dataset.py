@@ -106,7 +106,7 @@ class RouteChoiceDataset(torch_geometric.data.InMemoryDataset):
         rng = np.random.default_rng(self.seed)
         for _ in range(self.n_samples):
             try:
-                path_edges = sample_path(state_graph, orig, dest, rng)
+                path_edges = sample_path(state_graph, orig, dest, rng, prob_key="trans_prob")
                 edge_mask = torch.as_tensor([e in path_edges for e in state_graph.edges])  # convert path to mask
 
                 data = torch_graph.clone()

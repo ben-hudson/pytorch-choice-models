@@ -38,11 +38,18 @@ def get_state_graph(
     return state_graph
 
 
-def sample_path(state_graph: nx.DiGraph, orig: Any, dest: Any, rng: np.random.Generator, max_length: int = 1000):
+def sample_path(
+    state_graph: nx.DiGraph,
+    orig: Any,
+    dest: Any,
+    rng: np.random.Generator,
+    prob_key: str = "prob",
+    max_length: int = 1000,
+):
     k = orig
     path = []
     while k != dest and len(state_graph.out_edges(k)) > 0 and len(path) < max_length:
-        transitions = [t for t in state_graph.out_edges(k, data="trans_prob", default=0)]
+        transitions = [t for t in state_graph.out_edges(k, data=prob_key, default=0)]
         _, actions, probs = zip(*transitions)
         sample = rng.multinomial(1, probs)
         sampled_action = actions[np.argmax(sample)]
@@ -56,7 +63,7 @@ def sample_path(state_graph: nx.DiGraph, orig: Any, dest: Any, rng: np.random.Ge
     return path
 
 
-def compute_values_probs_flows(M: np.array, orig_idx: int, dest_idx: int):
+def compute_values_probs_flows(M: np.ndarray, orig_idx: int, dest_idx: int):
     b = np.zeros(M.shape[0])
     b[dest_idx] = 1.0
     z = np.linalg.solve(np.eye(M.shape[0]) - M, b)
@@ -77,20 +84,15 @@ def compute_values_probs_flows(M: np.array, orig_idx: int, dest_idx: int):
 
 
 def normalize_attrs(graph: nx.DiGraph, on: str, attrs_to_keep: Iterable[str] = "all", default: Any = 0.0):
-    if on == "nodes":
-
-        def iter_element_data():
+    def iter_element_data():
+        if on == "nodes":
             for k, data in graph.nodes(data=True):
                 yield k, data
-
-    elif on == "edges":
-
-        def iter_element_data():
+        elif on == "edges":
             for k, a, data in graph.edges(data=True):
                 yield (k, a), data
-
-    else:
-        raise ValueError("'on' must be 'nodes' or 'edges'.")
+        else:
+            raise ValueError("'on' must be 'nodes' or 'edges'.")
 
     if attrs_to_keep == "all":
         # get a superset of attrs

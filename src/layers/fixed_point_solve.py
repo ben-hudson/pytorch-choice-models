@@ -21,7 +21,7 @@ class FixedPointSolver(torch.nn.Module):
         exp_utils = utils.exp()
 
         # this automatically sums values on parallel edges, which is what we want
-        M = torch_geometric.utils.to_dense_adj(edge_index, batch=batch, edge_attr=exp_utils.squeeze())
+        M = torch_geometric.utils.to_dense_adj(edge_index, batch=batch, edge_attr=exp_utils.squeeze(-1))
         b, real_node_mask = torch_geometric.utils.to_dense_batch(sink_node_mask, batch=batch, fill_value=False)
 
         batch_size, n_nodes = b.shape
@@ -30,11 +30,18 @@ class FixedPointSolver(torch.nn.Module):
         # we want to solve Mz + b = f(z) = z
         # See https://www.sciencedirect.com/science/article/pii/S0191261513001276
         f = lambda z: torch.bmm(M, z) + b
-        # the solution is basically 1 at the destination node and less than 1 everywhere else, so b is a good starting point
+        # the solution is basically 1 at the destination node and less than 1 everywhere else, so b is a good starting guess
         z_0 = b.clone()
         z_out, info = self.deq(f, z_0)
         # for our setup, there is always one element in z_out
-        z = z_out[-1]
-        V = z[real_node_mask].clamp(min=0).log()
-        V = V.masked_fill(torch.isinf(V), torch.nan)
-        return V
+        # un-dense batch it
+        z = z_out[-1][real_node_mask]
+
+        V = z.clamp(min=0).log()
+
+        if utils.dim() == 2:
+            # util dim is n_nodes x 1
+            return V
+        else:
+            # util dim is something else, probably n_nodes
+            return V.squeeze(-1)

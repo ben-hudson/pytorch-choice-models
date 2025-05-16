@@ -3,16 +3,19 @@ import pytest
 import torch
 import tqdm
 
+from torch_geometric.loader import DataLoader
+
 from route_choice.recursive_logit import RecursiveLogit
 
 
 @pytest.mark.parametrize(
     "rl_tutorial_dataset,use_vi",
-    [({"n_samples": 1000, "seed": 123}, True), ({"n_samples": 1000, "seed": 123}, False)],
+    [({"n_samples": 1000, "seed": 321}, True), ({"n_samples": 1000, "seed": 321}, False)],
     indirect=["rl_tutorial_dataset"],
 )
 def test_rl_tutorial_dataset(rl_tutorial_dataset, use_vi):
-    batch, feat_scaler, n_feats = rl_tutorial_dataset
+    dataset, feat_scaler, n_feats = rl_tutorial_dataset
+    loader = DataLoader(dataset, batch_size=len(dataset), shuffle=False)
 
     model = RecursiveLogit(n_feats, link_constant=True, use_value_iteration=use_vi)
     optim = torch.optim.Adam(model.parameters(), lr=1e-1)
@@ -20,18 +23,20 @@ def test_rl_tutorial_dataset(rl_tutorial_dataset, use_vi):
         optim, threshold=1e-4, threshold_mode="rel", patience=100, min_lr=1e-4
     )
 
-    progress_bar = tqdm.trange(500)
-    for epoch in progress_bar:
-        model.train()
-        optim.zero_grad()
+    for epoch in tqdm.trange(200):
+        for batch in loader:
+            feats_scaled_np = feat_scaler.transform(batch.edge_attr.numpy())
+            batch.feats = torch.as_tensor(feats_scaled_np, dtype=torch.float32)
+            batch.choice = batch.path_edges
 
-        loss = model.train_step(batch, loss_reduction="sum")
+            model.train()
+            optim.zero_grad()
 
-        loss.backward()
-        optim.step()
-        scheduler.step(loss)
+            loss = model.train_step(batch, loss_reduction="sum")
 
-        progress_bar.set_postfix({"loss": loss.detach().item(), "lr": scheduler.get_last_lr()[0]})
+            loss.backward()
+            optim.step()
+            scheduler.step(loss)
 
     params = model.get_params()
     beta = params["beta"] / feat_scaler.scale_

@@ -1,6 +1,7 @@
 import networkx as nx
 import numpy as np
 import pytest
+import uuid
 
 from route_choice.data.tutorial import (
     load_small_acyclic_network,
@@ -63,7 +64,7 @@ def rl_tutorial_dataset(request: pytest.FixtureRequest):
     util_scale = 1.0
 
     dataset = ToyRouteChoiceDataset(
-        "/tmp/tutorial_network_dataset",
+        f"/tmp/tutorial_network_dataset_{uuid.uuid4()}",
         load_tutorial_network(),
         feat_attrs,
         feat_fn,
