@@ -1,19 +1,23 @@
 import networkx as nx
 import numpy as np
 import pytest
-import random
-import torch
-import torch_geometric.data
-import torch_geometric.utils
+import uuid
 
-from route_choice.utils import solve_bellman_lin_eqs, get_edge_probs
+from route_choice.data.tutorial import (
+    load_small_acyclic_network,
+    load_small_cyclic_network,
+    load_tutorial_network,
+    ToyRouteChoiceDataset,
+)
+from route_choice.data.utils import get_state_graph
 from sklearn.preprocessing import StandardScaler
-from typing import Any
 
 
 @pytest.fixture
 def random_strongly_connected_graph(request: pytest.FixtureRequest):
-    max_nodes, edge_prob, seed = request.param
+    max_nodes = request.param.get("max_nodes", 10)
+    edge_prob = request.param.get("edge_prob", 0.1)
+    seed = request.param.get("seed", None)
 
     # generate a graph
     H = nx.fast_gnp_random_graph(max_nodes, edge_prob, directed=True, seed=seed)
@@ -24,172 +28,56 @@ def random_strongly_connected_graph(request: pytest.FixtureRequest):
     # take that component and add edge costs
     G = H.subgraph(largest_component).copy()
     node_pos = nx.spring_layout(G)
+    nx.set_node_attributes(G, node_pos, "pos")
     for i, j in G.edges:
         G.edges[i, j]["cost"] = np.linalg.norm(node_pos[j] - node_pos[i])
     return G
 
 
-# https://arxiv.org/abs/1905.00883v2 figure 1
-def small_acyclic_network():
-    G = nx.MultiDiGraph()
-
-    G.add_node(1, value=-1.5803)
-    G.add_node(2, value=-1.6867)
-    G.add_node(3, value=-1.5)
-    G.add_node(4, value=0.0)
-
-    G.add_edge(1, 2, cost=1, prob=0.3308)
-    G.add_edge(1, 4, cost=2, prob=0.6572)
-    G.add_edge(1, 4, cost=6, prob=0.0120)
-    G.add_edge(2, 3, cost=1.5, prob=0.2689)
-    G.add_edge(2, 4, cost=2, prob=0.7311)
-    G.add_edge(3, 4, cost=1.5, prob=1.0)
-
-    return G
-
-
-# https://arxiv.org/abs/1905.00883v2 figure 2
-def small_cyclic_network():
-    G = nx.MultiDiGraph()
-
-    G.add_node(1, value=-1.5496)
-    G.add_node(2, value=-1.5968)
-    G.add_node(3, value=-1.1998)
-    G.add_node(4, value=0.0)
-
-    G.add_edge(1, 2, cost=1, prob=0.3509)
-    G.add_edge(1, 4, cost=2, prob=0.6374)
-    G.add_edge(1, 4, cost=6, prob=0.0117)
-    G.add_edge(2, 3, cost=1.5, prob=0.3318)
-    G.add_edge(2, 4, cost=2, prob=0.6682)
-    G.add_edge(3, 4, cost=1.5, prob=0.7407)
-    G.add_edge(3, 1, cost=1, prob=0.2593)
-
-    return G
-
-
 @pytest.fixture
-def small_network(request):
+def small_network(request: pytest.FixtureRequest):
     if request.param.get("cyclic", False):
-        return small_cyclic_network()
+        source_graph = load_small_cyclic_network()
     else:
-        return small_acyclic_network()
+        source_graph = load_small_acyclic_network()
+
+    orig = 1
+    dest = 4
+    feat_fn = lambda source_graph, k, a: {"cost": source_graph.edges[a]["cost"] if a is not None else 0}
+    util_fn = lambda feats: -feats["cost"]
+    util_scale = 1.0
+    state_graph = get_state_graph(source_graph, orig, dest, feat_fn, util_fn, util_scale)
+
+    return source_graph, state_graph, orig, dest
 
 
-# https://arxiv.org/abs/1905.00883v2 figure 3
 @pytest.fixture
-def route_choice_graph():
-    G = nx.MultiDiGraph()
-    G.add_node("o", pos=(0, 0))
-    G.add_node("A", pos=(1, 0))
-    G.add_node("B", pos=(2, 0))
-    G.add_node("C", pos=(3, 0))
-    G.add_node("D", pos=(4, 0))
-    G.add_node("E", pos=(0, 1))
-    G.add_node("F", pos=(1, 1))
-    G.add_node("H", pos=(2, 1))
-    G.add_node("I", pos=(3, 1))
-    G.add_node("G", pos=(1, 2))
-    G.add_node("d", pos=(4, 2))
-
-    G.add_edge("o", "A", travel_time=0.3)
-    G.add_edge("A", "B", travel_time=0.1)
-    G.add_edge("B", "C", travel_time=0.1)
-    G.add_edge("C", "D", travel_time=0.3)
-    G.add_edge("o", "E", travel_time=0.4)
-    G.add_edge("A", "F", travel_time=0.1)
-    G.add_edge("B", "H", travel_time=0.2)
-    G.add_edge("C", "I", travel_time=0.1)
-    G.add_edge("C", "d", travel_time=0.9)
-    G.add_edge("D", "d", travel_time=2.6)
-    G.add_edge("E", "G", travel_time=0.3)
-    G.add_edge("F", "G", travel_time=0.3)
-    G.add_edge("F", "H", travel_time=0.2)
-    G.add_edge("H", "d", travel_time=0.5)
-    G.add_edge("H", "I", travel_time=0.2)
-    G.add_edge("I", "d", travel_time=0.3)
-    G.add_edge("G", "H", travel_time=0.6)
-    G.add_edge("G", "d", travel_time=0.7)
-    G.add_edge("G", "d", travel_time=2.8)
-
-    return G
-
-
-# https://arxiv.org/abs/1905.00883v2 section 5.1
-@pytest.fixture
-def route_choice_dataset(route_choice_graph: nx.MultiDiGraph, request: pytest.FixtureRequest):
+def rl_tutorial_dataset(request: pytest.FixtureRequest):
     n_samples = request.param.get("n_samples", 500)
     seed = request.param.get("seed", None)
 
-    # edge features
-    feat_attrs = ["travel_time"]
-    n_feats = len(feat_attrs)
-
     orig = "o"
     dest = "d"
-    # node features
-    for n in route_choice_graph.nodes:
-        route_choice_graph.nodes[n]["orig"] = n == orig
-        route_choice_graph.nodes[n]["dest"] = n == dest
+    feat_attrs = ["travel_time"]
+    feat_fn = lambda source_graph, k, a: {"travel_time": source_graph.edges[a]["travel_time"] if a is not None else 0}
+    util_fn = lambda feats: -2.0 * feats["travel_time"] - 0.01
+    util_scale = 1.0
 
-    # deterministic util
-    beta_tt = -2.0  # coefficient for travel time
-    beta_lc = -0.01  # coefficient for link constant (penalizes number of links in a path)
-    for e in route_choice_graph.edges:
-        travel_time = route_choice_graph.edges[e]["travel_time"]
-        link_constant = 1
-        determ_util = beta_tt * travel_time + beta_lc * link_constant
-        route_choice_graph.edges[e]["determ_util"] = determ_util
-
-    # deterministic value
-    values = solve_bellman_lin_eqs(route_choice_graph, dest, util_key="determ_util")
-    nx.set_node_attributes(route_choice_graph, values, "value")
-
-    edge_probs = get_edge_probs(route_choice_graph, util_key="determ_util", value_key="value")
-    nx.set_edge_attributes(route_choice_graph, edge_probs, "prob")
-
-    # now, generate samples
-    paths = _sample_paths(route_choice_graph, orig, dest, n_samples, prob_key="prob", seed=seed)
-
-    samples = []
-    for path in paths:
-        graph = route_choice_graph.copy()
-
-        for e in graph.edges:
-            graph.edges[e]["choice"] = e in path
-
-        torch_graph = torch_geometric.utils.from_networkx(graph, group_edge_attrs=feat_attrs)
-        samples.append(torch_graph)
-
-    batch = torch_geometric.data.Batch.from_data_list(samples)
+    dataset = ToyRouteChoiceDataset(
+        f"/tmp/tutorial_network_dataset_{uuid.uuid4()}",
+        load_tutorial_network(),
+        feat_attrs,
+        feat_fn,
+        util_fn,
+        util_scale,
+        orig,
+        dest,
+        n_samples,
+        seed=seed,
+        force_reload=True,
+    )
 
     feat_scaler = StandardScaler()
-    feats_scaled_np = feat_scaler.fit_transform(batch.edge_attr.numpy())
-    batch.feats = torch.as_tensor(feats_scaled_np, dtype=torch.float32)
+    feat_scaler.fit(dataset.edge_attr.numpy())
 
-    return batch, feat_scaler, n_feats
-
-
-def _sample_paths(graph: nx.MultiDiGraph, orig: Any, dest: Any, n_samples: int, prob_key: str = "prob", seed=None):
-    assert graph.is_multigraph() and graph.is_directed(), "expected a directed multigraph"
-
-    random.seed(seed)
-
-    paths = []
-    for _ in range(n_samples):
-
-        path = []
-        n = orig
-        while n != dest:
-            edges = []
-            probs = []
-            for u, v, k, prob in graph.out_edges(n, keys=True, data=prob_key):
-                edges.append((u, v, k))
-                probs.append(prob)
-            edge = random.choices(edges, weights=probs, k=1)[0]  # random.choices supports weights, .choice does not
-            path.append(edge)
-            n = edge[1]
-
-        paths.append(path)
-
-    return paths
+    return dataset, feat_scaler, len(feat_attrs)

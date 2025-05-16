@@ -3,7 +3,7 @@ import torch
 from torch_geometric.nn import MessagePassing
 
 
-class ExpValueIteration(MessagePassing):
+class ValueIterationSolver(MessagePassing):
     def __init__(self, **kwargs):
         super().__init__(aggr="sum", flow="target_to_source", **kwargs)
 
@@ -28,8 +28,10 @@ class ExpValueIteration(MessagePassing):
         eps: float = 1e-6,
     ):
         exp_utils = utils.exp()
-        exp_values = torch.zeros((sink_node_mask.size(0), 1), dtype=torch.float32)  # exp(-inf)
-        exp_values[sink_node_mask] = 1.0  # exp(0)
+        # the sink node mask is actually equivalent to exp(V), since it is 1 at the sink and 0 everywhere else
+        exp_values = sink_node_mask.clone().type_as(exp_utils)
+        if utils.dim() == 2:
+            exp_values = exp_values.unsqueeze(-1)
 
         n_iters = 0
         while n_iters < max_iters:

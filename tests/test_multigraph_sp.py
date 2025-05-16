@@ -6,7 +6,13 @@ from route_choice.utils import shortestpath_edges
 
 
 @pytest.mark.parametrize(
-    "random_strongly_connected_graph", [(10, 0.1, 123), (20, 0.2, 456), (30, 0.3, 789)], indirect=True
+    "random_strongly_connected_graph",
+    [
+        {"max_nodes": 10, "edge_prob": 0.1, "seed": 123},
+        {"max_nodes": 20, "edge_prob": 0.2, "seed": 456},
+        {"max_nodes": 30, "edge_prob": 0.3, "seed": 789},
+    ],
+    indirect=True,
 )
 def test_multigraph_sp(random_strongly_connected_graph: nx.DiGraph):
     node_list = list(random_strongly_connected_graph.nodes)
