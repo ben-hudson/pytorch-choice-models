@@ -1,6 +1,6 @@
 import networkx as nx
 
-from matplotlib import colors, cm, pyplot as plt
+from matplotlib import colors, cm
 from typing import Any, Dict, Mapping
 
 from .dataset import RouteChoiceDataset
@@ -103,6 +103,9 @@ def draw_networkx_edge_attr(
 
 class ToyRouteChoiceDataset(RouteChoiceDataset):
     def plot_dataset(self):
+        # only import matplotlib when we actually want to do some plotting
+        from matplotlib import pyplot as plt
+
         fig, axes = plt.subplots(1, 2)
         node_pos = nx.get_node_attributes(self.source_graph, "pos")
         node_labels = {n: n for n in self.source_graph.nodes}

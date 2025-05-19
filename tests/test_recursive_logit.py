@@ -15,7 +15,7 @@ from route_choice.recursive_logit import RecursiveLogit
 )
 def test_rl_tutorial_dataset(rl_tutorial_dataset, use_vi):
     dataset, feat_scaler, n_feats = rl_tutorial_dataset
-    loader = DataLoader(dataset, batch_size=len(dataset), shuffle=False)
+    loader = DataLoader(dataset, batch_size=256, shuffle=False)
 
     model = RecursiveLogit(n_feats, link_constant=True, use_value_iteration=use_vi)
     optim = torch.optim.Adam(model.parameters(), lr=1e-1)
@@ -23,7 +23,9 @@ def test_rl_tutorial_dataset(rl_tutorial_dataset, use_vi):
         optim, threshold=1e-4, threshold_mode="rel", patience=50, min_lr=1e-4
     )
 
-    for epoch in tqdm.trange(200):
+    progress_bar = tqdm.trange(200)
+    for epoch in progress_bar:
+        epoch_loss = 0
         for batch in loader:
             feats_scaled_np = feat_scaler.transform(batch.edge_attr.numpy())
             batch.feats = torch.as_tensor(feats_scaled_np, dtype=torch.float32)
@@ -33,10 +35,13 @@ def test_rl_tutorial_dataset(rl_tutorial_dataset, use_vi):
             optim.zero_grad()
 
             loss = model.train_step(batch, loss_reduction="sum")
-
             loss.backward()
             optim.step()
-            scheduler.step(loss)
+
+            epoch_loss += loss.detach()
+
+        scheduler.step(epoch_loss)
+        progress_bar.set_postfix({"loss": epoch_loss.item(), "lr": scheduler.get_last_lr()[0]})
 
     params = model.get_params()
     beta = params["beta"] / feat_scaler.scale_

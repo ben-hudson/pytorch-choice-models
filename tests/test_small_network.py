@@ -15,7 +15,7 @@ def test_values_and_probs_vi(small_network: nx.MultiDiGraph):
     normalize_attrs(state_graph, on="nodes", attrs_to_keep="all")
     normalize_attrs(state_graph, on="edges", attrs_to_keep="all")
     for i, n in enumerate(state_graph.nodes):
-        state_graph.nodes[n]["nx_node_index"] = i
+        state_graph.nodes[n]["nx_node_idx"] = i
     torch_graph = torch_geometric.utils.from_networkx(state_graph)
 
     value_iter = ValueIterationSolver(node_dim=0)
@@ -35,7 +35,7 @@ def test_values_and_probs_vi(small_network: nx.MultiDiGraph):
         # skip the dummy nodes because they don't exist in source_graph
         if not torch_graph.is_dummy[i]:
             # first we find the index of the node in state_graph
-            state_idx = torch_graph.nx_node_index[i]
+            state_idx = torch_graph.nx_node_idx[i]
             # then we find the destination node of the state, which is an edge in the source graph
             n = state_list[state_idx][1]
             # finally we can retrieve the node value
@@ -47,7 +47,7 @@ def test_values_and_probs_vi(small_network: nx.MultiDiGraph):
         if not torch_graph.is_dummy[i]:
             p = torch_geometric.utils.mask_select(probs, -1, torch_graph.edge_index[1] == i)
 
-            state_idx = torch_graph.nx_node_index[i]
+            state_idx = torch_graph.nx_node_idx[i]
             e = state_list[state_idx]
             edge_prob = source_graph.edges[e]["prob"]
             assert torch.isclose(p, torch.as_tensor(edge_prob), atol=1e-4).all()
@@ -60,7 +60,7 @@ def test_values_and_probs_fixed_point(small_network: nx.MultiDiGraph):
     normalize_attrs(state_graph, on="nodes", attrs_to_keep="all")
     normalize_attrs(state_graph, on="edges", attrs_to_keep="all")
     for i, n in enumerate(state_graph.nodes):
-        state_graph.nodes[n]["nx_node_index"] = i
+        state_graph.nodes[n]["nx_node_idx"] = i
     torch_graph = torch_geometric.utils.from_networkx(state_graph)
     batch = torch.zeros(torch_graph.num_nodes, dtype=torch.int64)
 
@@ -73,7 +73,7 @@ def test_values_and_probs_fixed_point(small_network: nx.MultiDiGraph):
     state_list = list(state_graph.nodes)
     for i in range(torch_graph.num_nodes):
         if not torch_graph.is_dummy[i]:
-            state_idx = torch_graph.nx_node_index[i]
+            state_idx = torch_graph.nx_node_idx[i]
             n = state_list[state_idx][1]
             node_value = source_graph.nodes[n]["value"]
             assert torch.isclose(values[i], torch.as_tensor(node_value), atol=1e-4)
@@ -82,7 +82,7 @@ def test_values_and_probs_fixed_point(small_network: nx.MultiDiGraph):
         if not torch_graph.is_dummy[i]:
             p = torch_geometric.utils.mask_select(probs, -1, torch_graph.edge_index[1] == i)
 
-            state_idx = torch_graph.nx_node_index[i]
+            state_idx = torch_graph.nx_node_idx[i]
             e = state_list[state_idx]
             edge_prob = source_graph.edges[e]["prob"]
             assert torch.isclose(p, torch.as_tensor(edge_prob), atol=1e-4).all()

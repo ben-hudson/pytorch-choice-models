@@ -21,6 +21,7 @@ dependencies = [
     "torch_geometric",
     "torch",
     "torchdeq",
+    "tqdm",
 ]
 
 [tool.setuptools_scm]

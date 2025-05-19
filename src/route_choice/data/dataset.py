@@ -95,10 +95,11 @@ class RouteChoiceDataset(torch_geometric.data.InMemoryDataset):
         normalize_attrs(state_graph, on="nodes", attrs_to_keep="all")
         normalize_attrs(state_graph, on="edges", attrs_to_keep="all")
         # add networkx indices so we can reindex from PyG
+        # PyG automatically REINDEXES any attribute ending in "index" when batching, so we have to call this "idx"
         for i, k in enumerate(state_graph.nodes):
-            state_graph.nodes[k]["nx_node_index"] = i
+            state_graph.nodes[k]["nx_node_idx"] = i
         for i, (k, a) in enumerate(state_graph.edges):
-            state_graph.edges[k, a]["nx_edge_index"] = i
+            state_graph.edges[k, a]["nx_edge_idx"] = i
         torch_graph = torch_geometric.utils.from_networkx(state_graph, group_edge_attrs=self.feat_attrs)
 
         # sample paths
@@ -110,7 +111,7 @@ class RouteChoiceDataset(torch_geometric.data.InMemoryDataset):
                 edge_mask = torch.as_tensor([e in path_edges for e in state_graph.edges])  # convert path to mask
 
                 data = torch_graph.clone()
-                data.path_edges = edge_mask[data.nx_edge_index]  # reindex according to PyG node order
+                data.path_edges = edge_mask[data.nx_edge_idx]  # reindex according to PyG node order
                 data_list.append(data)
 
             except SamplingException:
