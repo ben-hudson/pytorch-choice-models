@@ -8,7 +8,11 @@ import torch_geometric.utils
 
 from typing import Any, Callable, List
 
-from .utils import SamplingException, compute_values_probs_flows, get_state_graph, normalize_attrs, sample_path
+from .utils import compute_values_probs_flows, get_state_graph, normalize_attrs
+
+
+class SamplingException(Exception):
+    pass
 
 
 class RouteChoiceDataset(torch_geometric.data.InMemoryDataset):
@@ -107,11 +111,11 @@ class RouteChoiceDataset(torch_geometric.data.InMemoryDataset):
         rng = np.random.default_rng(self.seed)
         for _ in range(self.n_samples):
             try:
-                path_edges = sample_path(state_graph, orig, dest, rng, prob_key="trans_prob")
-                edge_mask = torch.as_tensor([e in path_edges for e in state_graph.edges])  # convert path to mask
+                path = self.sample_path(state_graph, orig, dest, rng, prob_key="trans_prob")
+                edge_mask = torch.as_tensor([e in path for e in state_graph.edges])  # convert path to mask
 
                 data = torch_graph.clone()
-                data.path_edges = edge_mask[data.nx_edge_idx]  # reindex according to PyG node order
+                data.path = edge_mask[data.nx_edge_idx]  # reindex according to PyG node order
                 data_list.append(data)
 
             except SamplingException:
@@ -119,6 +123,31 @@ class RouteChoiceDataset(torch_geometric.data.InMemoryDataset):
 
         assert len(data_list) > 0, "Unable to sample any paths."
         self.save(data_list, self.processed_paths[1])
+
+    def sample_path(
+        self,
+        state_graph: nx.DiGraph,
+        orig: Any,
+        dest: Any,
+        rng: np.random.Generator,
+        prob_key: str = "prob",
+        max_length: int = 1000,
+    ):
+        k = orig
+        path = []
+        while k != dest and len(state_graph.out_edges(k)) > 0 and len(path) < max_length:
+            transitions = [t for t in state_graph.out_edges(k, data=prob_key, default=0)]
+            _, actions, probs = zip(*transitions)
+            sample = rng.multinomial(1, probs)
+            sampled_action = actions[np.argmax(sample)]
+            path.append((k, sampled_action))
+
+            k = sampled_action
+
+        if k != dest:
+            raise SamplingException(f"Unable to sample path from {orig} to {dest} in less than {max_length} steps.")
+
+        return path
 
     def plot_dataset(self):
         raise NotImplementedError("You need to override this method.")

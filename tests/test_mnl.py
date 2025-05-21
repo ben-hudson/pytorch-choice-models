@@ -39,5 +39,5 @@ def test_mnl(mode_choice_dataset):
         params["asc"], torch.tensor([5.2074, 3.8690, 3.1632]), rtol=0.1
     ).all(), f"ASCs were not close to values estimated by PyLogit - see {__file__} for details"
     assert np.isclose(
-        params["beta"] / feat_scaler.scale_, np.array([-0.0155, -0.0961, 0.0133]), rtol=0.1
+        params["beta"].numpy() / feat_scaler.scale_, np.array([-0.0155, -0.0961, 0.0133]), rtol=0.1
     ).all(), f"betas were not close to values estimated by PyLogit - see {__file__} for details"

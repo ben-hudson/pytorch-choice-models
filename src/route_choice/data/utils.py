@@ -5,10 +5,6 @@ import numpy as np
 from typing import Any, Callable, Iterable
 
 
-class SamplingException(Exception):
-    pass
-
-
 def get_state_graph(
     source_graph: nx.MultiDiGraph, orig: Any, dest: Any, feat_fn: Callable, util_fn: Callable, util_scale: float
 ) -> nx.DiGraph:
@@ -36,31 +32,6 @@ def get_state_graph(
         state_graph.edges[k, a]["M"] = math.exp(1 / util_scale * util)
 
     return state_graph
-
-
-def sample_path(
-    state_graph: nx.DiGraph,
-    orig: Any,
-    dest: Any,
-    rng: np.random.Generator,
-    prob_key: str = "prob",
-    max_length: int = 1000,
-):
-    k = orig
-    path = []
-    while k != dest and len(state_graph.out_edges(k)) > 0 and len(path) < max_length:
-        transitions = [t for t in state_graph.out_edges(k, data=prob_key, default=0)]
-        _, actions, probs = zip(*transitions)
-        sample = rng.multinomial(1, probs)
-        sampled_action = actions[np.argmax(sample)]
-        path.append((k, sampled_action))
-
-        k = sampled_action
-
-    if k != dest:
-        raise SamplingException(f"Unable to sample path from {orig} to {dest} in less than {max_length} steps.")
-
-    return path
 
 
 def compute_values_probs_flows(M: np.ndarray, orig_idx: int, dest_idx: int):

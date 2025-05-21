@@ -44,5 +44,5 @@ def test_heteroskedastic_logit(mode_choice_dataset):
     ), f"log-likelihood was not close to value estimated by PyLogit - see {__file__} for details"
     # with the exception of the betas, the confidence intervals are so wide on the parameters that it doesn't make sense to check them
     assert np.isclose(
-        params["beta"] / feat_scaler.scale_, np.array([-0.0333, -0.1156, 0.0381]), rtol=0.1
+        params["beta"].numpy() / feat_scaler.scale_, np.array([-0.0333, -0.1156, 0.0381]), rtol=0.1
     ).all(), f"betas were not close to values estimated by PyLogit - see {__file__} for details"

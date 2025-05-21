@@ -29,7 +29,7 @@ def test_rl_tutorial_dataset(rl_tutorial_dataset, use_vi):
         for batch in loader:
             feats_scaled_np = feat_scaler.transform(batch.edge_attr.numpy())
             batch.feats = torch.as_tensor(feats_scaled_np, dtype=torch.float32)
-            batch.choice = batch.path_edges
+            batch.choice = batch.path
 
             model.train()
             optim.zero_grad()
@@ -44,7 +44,7 @@ def test_rl_tutorial_dataset(rl_tutorial_dataset, use_vi):
         progress_bar.set_postfix({"loss": epoch_loss.item(), "lr": scheduler.get_last_lr()[0]})
 
     params = model.get_params()
-    beta = params["beta"] / feat_scaler.scale_
-    lc = params["link_constant"] - params["beta"] * feat_scaler.mean_ / feat_scaler.scale_
+    beta = params["beta"].numpy() / feat_scaler.scale_
+    lc = params["link_constant"].numpy() - params["beta"].numpy() * feat_scaler.mean_ / feat_scaler.scale_
     assert np.isclose(beta, np.array([-2.0]), rtol=0.1), f"beta not close to expected value of -2 ({beta})"
     assert np.isclose(lc, np.array([-0.01]), atol=0.04), f"link constant not close to expected value of -0.01 ({lc})"
