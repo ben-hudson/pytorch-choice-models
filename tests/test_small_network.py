@@ -32,25 +32,21 @@ def test_values_and_probs_vi(small_network: nx.MultiDiGraph):
     # to get the corresponding node value we have to index torch_graph -> state_graph -> source_graph
     state_list = list(state_graph.nodes)
     for i in range(torch_graph.num_nodes):
-        # skip the dummy nodes because they don't exist in source_graph
+        # skip the dummy states because they don't exist in source_graph
         if not torch_graph.is_dummy[i]:
-            # first we find the index of the node in state_graph
-            state_idx = torch_graph.nx_node_idx[i]
-            # then we find the destination node of the state, which is an edge in the source graph
-            n = state_list[state_idx][1]
-            # finally we can retrieve the node value
-            node_value = source_graph.nodes[n]["value"]
-            assert torch.isclose(values[i], torch.as_tensor(node_value), atol=1e-4)
-
-    # now for the transition probabilities, same idea
-    for i in range(torch_graph.num_nodes):
-        if not torch_graph.is_dummy[i]:
-            p = torch_geometric.utils.mask_select(probs, -1, torch_graph.edge_index[1] == i)
-
             state_idx = torch_graph.nx_node_idx[i]
             e = state_list[state_idx]
+            n = e[1]  # destination node
+
             edge_prob = source_graph.edges[e]["prob"]
-            assert torch.isclose(p, torch.as_tensor(edge_prob), atol=1e-4).all()
+            assert torch.isclose(
+                torch_geometric.utils.mask_select(probs, -1, torch_graph.edge_index[1] == i),
+                torch.as_tensor(edge_prob),
+                atol=1e-4,
+            ).all()
+
+            node_value = source_graph.nodes[n]["value"]
+            assert torch.isclose(values[i], torch.as_tensor(node_value), atol=1e-4)
 
 
 @pytest.mark.parametrize("small_network", [{"cyclic": False}, {"cyclic": True}], indirect=True)
@@ -70,22 +66,24 @@ def test_values_and_probs_fixed_point(small_network: nx.MultiDiGraph):
     values = lin_eqs(torch_graph.util, torch_graph.edge_index, torch_graph.is_dest, batch)
     probs = edge_prob(values, torch_graph.util, torch_graph.edge_index)
 
+    # to get the corresponding node value we have to index torch_graph -> state_graph -> source_graph
     state_list = list(state_graph.nodes)
     for i in range(torch_graph.num_nodes):
+        # skip the dummy states because they don't exist in source_graph
         if not torch_graph.is_dummy[i]:
-            state_idx = torch_graph.nx_node_idx[i]
-            n = state_list[state_idx][1]
-            node_value = source_graph.nodes[n]["value"]
-            assert torch.isclose(values[i], torch.as_tensor(node_value), atol=1e-4)
-
-    for i in range(torch_graph.num_nodes):
-        if not torch_graph.is_dummy[i]:
-            p = torch_geometric.utils.mask_select(probs, -1, torch_graph.edge_index[1] == i)
-
             state_idx = torch_graph.nx_node_idx[i]
             e = state_list[state_idx]
+            n = e[1]  # destination node
+
             edge_prob = source_graph.edges[e]["prob"]
-            assert torch.isclose(p, torch.as_tensor(edge_prob), atol=1e-4).all()
+            assert torch.isclose(
+                torch_geometric.utils.mask_select(probs, -1, torch_graph.edge_index[1] == i),
+                torch.as_tensor(edge_prob),
+                atol=1e-4,
+            ).all()
+
+            node_value = source_graph.nodes[n]["value"]
+            assert torch.isclose(values[i], torch.as_tensor(node_value), atol=1e-4)
 
 
 @pytest.mark.parametrize("small_network", [{"cyclic": False}, {"cyclic": True}], indirect=True)

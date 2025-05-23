@@ -44,15 +44,15 @@ class RecursiveLogit(torch.nn.Module):
 
     def train_step(self, batch: torch_geometric.data.Batch, loss_reduction: str = "mean"):
         value, util, prob = self.forward(batch.feats, batch.is_dest, batch.edge_index, batch.batch, batch.num_nodes)
+        info = {"value": value.detach(), "util": util.detach(), "prob": prob.detach()}
         # now to compute the loss of prob wrt to choice
         nll = -torch.log(prob[batch.choice])
         if loss_reduction == "mean":
-            return nll.mean()
+            return nll.mean(), info
         elif loss_reduction == "sum":
-            return nll.sum()
+            return nll.sum(), info
         else:
             raise ValueError(f"unknown reduction: {loss_reduction}")
 
     def get_params(self):
-        params = dict(self.named_parameters())
-        return {"beta": params["coeffs.weight"].detach(), "link_constant": params["coeffs.bias"].detach()}
+        return {name: param.detach() for name, param in self.named_parameters()}

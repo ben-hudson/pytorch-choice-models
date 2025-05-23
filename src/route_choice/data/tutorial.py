@@ -1,5 +1,6 @@
 import networkx as nx
 
+from collections import defaultdict
 from matplotlib import colors, cm
 from typing import Any, Dict, Mapping
 
@@ -81,17 +82,13 @@ def load_tutorial_network():
 
 
 def draw_networkx_edge_attr(
-    G: nx.MultiDiGraph, pos: Mapping, edge_attr: Any = None, default_color="k", bend: float = 0.1, **kwargs: Dict
+    G: nx.MultiDiGraph, pos: Mapping, edge_attr: Dict[Any, float], default_color="k", bend: float = 0.1, **kwargs: Dict
 ):
     # drawing multigraph edges is tricky, especially when we want to color them according to a value
-    if edge_attr is not None:
-        edge_vals = nx.get_edge_attributes(G, edge_attr)
-        cmap = kwargs.pop("cmap", cm.get_cmap("viridis"))
-        norm = colors.Normalize(min(edge_vals.values()), max(edge_vals.values()))
-        sm = cm.ScalarMappable(norm, cmap)
-        edge_colors = {e: sm.to_rgba(v) for e, v in edge_vals.items()}
-    else:
-        edge_colors = {}
+    cmap = kwargs.pop("cmap", "viridis")
+    norm = colors.Normalize(min(edge_attr.values()), max(edge_attr.values()))
+    sm = cm.ScalarMappable(norm, cmap)
+    edge_colors = {e: sm.to_rgba(v) for e, v in edge_attr.items()}
 
     # draw edges one at a time, bending each one appropriately
     for e in G.edges:
@@ -102,24 +99,28 @@ def draw_networkx_edge_attr(
 
 
 class ToyRouteChoiceDataset(RouteChoiceDataset):
-    def plot_dataset(self):
-        # only import matplotlib when we actually want to do some plotting
-        from matplotlib import pyplot as plt
+    def plot_dataset(self, *axes):
+        orig = self.source_graph.graph["orig"]
+        dest = self.source_graph.graph["dest"]
 
-        fig, axes = plt.subplots(1, 2)
         node_pos = nx.get_node_attributes(self.source_graph, "pos")
         node_labels = {n: n for n in self.source_graph.nodes}
 
-        # first ax is value and util
-        for e in self.source_graph.edges:
-            self.source_graph.edges[e]["value"] = self.state_graph.nodes[e]["value"]
-            self.source_graph.edges[e]["unit_flow"] = self.state_graph.nodes[e]["unit_flow"]
-
+        # first ax is unit flows
+        axes[0].set_title("Flow (Ground Truth)")
+        flow = nx.get_node_attributes(self.state_graph, "unit_flow")
+        flow.pop(orig)
+        flow.pop(dest)
         nx.draw(self.source_graph, node_pos, labels=node_labels, ax=axes[0], edgelist=[])
-        draw_networkx_edge_attr(self.source_graph, node_pos, ax=axes[0], edge_attr="value", cmap="viridis")
+        draw_networkx_edge_attr(self.source_graph, node_pos, flow, ax=axes[0], cmap="viridis")
 
-        # second ax is edge frequency
-        nx.draw(self.source_graph, node_pos, labels=node_labels, ax=axes[1], edgelist=[])
-        draw_networkx_edge_attr(self.source_graph, node_pos, ax=axes[1], edge_attr="unit_flow", cmap="viridis")
-
-        return fig, axes
+        # second ax is edge values
+        if len(axes) > 1:
+            axes[1].set_title("Flow (Observed)")
+            state_visits = defaultdict(int)
+            for i, (k, a) in enumerate(self.state_graph.edges):
+                state_visits[a] += self.path[self.nx_edge_idx == i].sum()
+            # state_visits doesn't include orig because we only look at transitions in
+            state_visits.pop(dest)
+            nx.draw(self.source_graph, node_pos, labels=node_labels, ax=axes[1], edgelist=[])
+            draw_networkx_edge_attr(self.source_graph, node_pos, state_visits, ax=axes[1], cmap="viridis")
