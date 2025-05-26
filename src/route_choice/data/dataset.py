@@ -1,3 +1,4 @@
+import math
 import networkx as nx
 import numpy as np
 import pathlib
@@ -20,10 +21,11 @@ class RouteChoiceDataset(torch_geometric.data.InMemoryDataset):
         self,
         root: pathlib.Path,
         graph: nx.MultiDiGraph = None,
-        feat_attrs: List[str] = None,
-        feat_fn: Callable = None,
+        node_feat_attrs: List[str] = None,
+        node_feat_fn: Callable = None,
+        edge_feat_attrs: List[str] = None,
+        edge_feat_fn: Callable = None,
         util_fn: Callable = None,
-        util_scale: float = None,
         source: Any = None,
         target: Any = None,
         n_samples: int = None,
@@ -31,10 +33,11 @@ class RouteChoiceDataset(torch_geometric.data.InMemoryDataset):
         **kwargs,
     ):
         self.source_graph = graph
-        self.feat_attrs = feat_attrs
-        self.feat_fn = feat_fn
+        self.node_feat_attrs = node_feat_attrs
+        self.node_feat_fn = node_feat_fn
+        self.edge_feat_attrs = edge_feat_attrs
+        self.edge_feat_fn = edge_feat_fn
         self.util_fn = util_fn
-        self.util_scale = util_scale
         self.orig = source
         self.dest = target
         self.n_samples = n_samples
@@ -69,7 +72,7 @@ class RouteChoiceDataset(torch_geometric.data.InMemoryDataset):
         pickle.dump(self.source_graph, open(self.raw_paths[0], "wb"))
 
     def process(self):
-        required_kwargs = ["feat_attrs", "feat_fn", "util_fn", "util_scale", "n_samples"]
+        required_kwargs = ["util_fn", "n_samples"]
         assert all(
             getattr(self, kwarg, None) is not None for kwarg in required_kwargs
         ), f"No file(s) found at {self.processed_paths}. Pass {required_kwargs} kwargs to rebuild the dataset."
@@ -79,7 +82,45 @@ class RouteChoiceDataset(torch_geometric.data.InMemoryDataset):
         dest = source_graph.graph["dest"]
 
         # set up state graph
-        state_graph = get_state_graph(source_graph, orig, dest, self.feat_fn, self.util_fn, self.util_scale)
+        state_graph = get_state_graph(source_graph, orig, dest, self.node_feat_fn, self.edge_feat_fn)
+        pickle.dump(state_graph, open(self.processed_paths[0], "wb"))
+
+        # prepare state_graph to be transformed to PyG
+        normalize_attrs(state_graph, on="nodes", attrs_to_keep="all")
+        normalize_attrs(state_graph, on="edges", attrs_to_keep="all")
+        # add networkx indices so we can reindex from PyG
+        # PyG automatically REINDEXES any attribute ending in "index" when batching, so we have to call this "idx"
+        for i, k in enumerate(state_graph.nodes):
+            state_graph.nodes[k]["nx_node_idx"] = i
+        for i, (k, a) in enumerate(state_graph.edges):
+            state_graph.edges[k, a]["nx_edge_idx"] = i
+        torch_graph = torch_geometric.utils.from_networkx(
+            state_graph, group_node_attrs=self.node_feat_attrs, group_edge_attrs=self.edge_feat_attrs
+        )
+
+        # sample paths
+        rng = np.random.default_rng(self.seed)
+
+        paths_list = self.sample_paths(state_graph, orig, dest, rng, prob_key="trans_prob")
+        assert len(paths_list) > 0, "Unable to sample any paths."
+
+        data_list = []
+        for path in paths_list:
+            edge_mask = torch.as_tensor([e in path for e in state_graph.edges])  # convert path to mask
+
+            data = torch_graph.clone()
+            data.path = edge_mask[data.nx_edge_idx]  # reindex according to PyG node order
+            data_list.append(data)
+
+        self.save(data_list, self.processed_paths[1])
+
+    def sample_paths(self, state_graph: nx.DiGraph, orig: Any, dest: Any, rng: np.random.Generator, **kwargs):
+        util_scale = kwargs.pop("util_scale", 1)
+
+        for k, a, feats in state_graph.edges(data=True):
+            util = self.util_fn(feats)
+            state_graph.edges[k, a]["util"] = util
+            state_graph.edges[k, a]["M"] = math.exp(1 / util_scale * util)
 
         M, state_list = nx.attr_matrix(state_graph, "M")
         V, P, F = compute_values_probs_flows(M, state_list.index(orig), state_list.index(dest))
@@ -93,36 +134,15 @@ class RouteChoiceDataset(torch_geometric.data.InMemoryDataset):
                 if state_graph.has_edge(state_i, state_j):
                     state_graph.edges[state_i, state_j]["trans_prob"] = P[i, j].item()
 
-        pickle.dump(state_graph, open(self.processed_paths[0], "wb"))
-
-        # prepare state_graph to be transformed to PyG
-        normalize_attrs(state_graph, on="nodes", attrs_to_keep="all")
-        normalize_attrs(state_graph, on="edges", attrs_to_keep="all")
-        # add networkx indices so we can reindex from PyG
-        # PyG automatically REINDEXES any attribute ending in "index" when batching, so we have to call this "idx"
-        for i, k in enumerate(state_graph.nodes):
-            state_graph.nodes[k]["nx_node_idx"] = i
-        for i, (k, a) in enumerate(state_graph.edges):
-            state_graph.edges[k, a]["nx_edge_idx"] = i
-        torch_graph = torch_geometric.utils.from_networkx(state_graph, group_edge_attrs=self.feat_attrs)
-
-        # sample paths
-        data_list = []
-        rng = np.random.default_rng(self.seed)
+        paths = []
         for _ in range(self.n_samples):
             try:
                 path = self.sample_path(state_graph, orig, dest, rng, prob_key="trans_prob")
-                edge_mask = torch.as_tensor([e in path for e in state_graph.edges])  # convert path to mask
-
-                data = torch_graph.clone()
-                data.path = edge_mask[data.nx_edge_idx]  # reindex according to PyG node order
-                data_list.append(data)
-
+                paths.append(path)
             except SamplingException:
                 pass
 
-        assert len(data_list) > 0, "Unable to sample any paths."
-        self.save(data_list, self.processed_paths[1])
+        return paths
 
     def sample_path(
         self,

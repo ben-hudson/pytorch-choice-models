@@ -1,4 +1,3 @@
-import math
 import networkx as nx
 import numpy as np
 
@@ -6,7 +5,7 @@ from typing import Any, Callable, Iterable
 
 
 def get_state_graph(
-    source_graph: nx.MultiDiGraph, orig: Any, dest: Any, feat_fn: Callable, util_fn: Callable, util_scale: float
+    source_graph: nx.MultiDiGraph, orig: Any, dest: Any, state_feat_fn: Callable = None, trans_feat_fn: Callable = None
 ) -> nx.DiGraph:
     state_graph = nx.line_graph(source_graph, create_using=nx.DiGraph)
     state_graph.add_node(orig, is_dummy=True, is_orig=True)
@@ -17,19 +16,22 @@ def get_state_graph(
         if not is_dummy and k[1] == dest:
             state_graph.add_edge(k, dest)
 
-    for k, a in state_graph.edges:
-        k_is_orig = state_graph.nodes[k].get("is_orig", False)
-        a_is_dest = state_graph.nodes[a].get("is_dest", False)
+        if state_feat_fn is not None:
+            k_source_edge = None if is_dummy else k
 
-        k_source_edge = None if k_is_orig else k
-        a_source_edge = None if a_is_dest else a
+            feats = state_feat_fn(source_graph, k_source_edge)
+            state_graph.nodes[k].update(**feats)
 
-        feats = feat_fn(source_graph, k_source_edge, a_source_edge)
-        state_graph.edges[k, a].update(**feats)
+    if trans_feat_fn is not None:
+        for k, a in state_graph.edges:
+            k_is_orig = state_graph.nodes[k].get("is_orig", False)
+            a_is_dest = state_graph.nodes[a].get("is_dest", False)
 
-        util = util_fn(feats)
-        state_graph.edges[k, a]["util"] = util
-        state_graph.edges[k, a]["M"] = math.exp(1 / util_scale * util)
+            k_source_edge = None if k_is_orig else k
+            a_source_edge = None if a_is_dest else a
+
+            feats = trans_feat_fn(source_graph, k_source_edge, a_source_edge)
+            state_graph.edges[k, a].update(**feats)
 
     return state_graph
 

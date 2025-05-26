@@ -12,10 +12,6 @@ from route_choice.data.utils import compute_values_probs_flows, normalize_attrs
 def test_values_and_probs_vi(small_network: nx.MultiDiGraph):
     source_graph, state_graph, orig, dest = small_network
 
-    normalize_attrs(state_graph, on="nodes", attrs_to_keep="all")
-    normalize_attrs(state_graph, on="edges", attrs_to_keep="all")
-    for i, n in enumerate(state_graph.nodes):
-        state_graph.nodes[n]["nx_node_idx"] = i
     torch_graph = torch_geometric.utils.from_networkx(state_graph)
 
     value_iter = ValueIterationSolver(node_dim=0)
@@ -53,10 +49,6 @@ def test_values_and_probs_vi(small_network: nx.MultiDiGraph):
 def test_values_and_probs_fixed_point(small_network: nx.MultiDiGraph):
     source_graph, state_graph, orig, dest = small_network
 
-    normalize_attrs(state_graph, on="nodes", attrs_to_keep="all")
-    normalize_attrs(state_graph, on="edges", attrs_to_keep="all")
-    for i, n in enumerate(state_graph.nodes):
-        state_graph.nodes[n]["nx_node_idx"] = i
     torch_graph = torch_geometric.utils.from_networkx(state_graph)
     batch = torch.zeros(torch_graph.num_nodes, dtype=torch.int64)
 

@@ -69,8 +69,8 @@ def test_rl_tutorial_dataset(rl_tutorial_dataset, use_vi, plot):
         ).all(), f"flow on link {u, v, k} did not match the expected value of {flow}"
 
     if plot:
-        fig, axes = plt.subplots(1, 3, figsize=(10, 4))
-        dataset.plot_dataset(axes[0], axes[1])
+        fig, axes = plt.subplots(1, 2)
+        dataset.plot_dataset(axes[0])
 
         edge_flow = {}
         for i, k in enumerate(dataset.state_graph.nodes):
@@ -81,8 +81,8 @@ def test_rl_tutorial_dataset(rl_tutorial_dataset, use_vi, plot):
         node_pos = nx.get_node_attributes(dataset.source_graph, "pos")
         node_labels = {n: n for n in dataset.source_graph.nodes}
 
-        axes[2].set_title("Flow (Estimated)")
-        nx.draw(dataset.source_graph, node_pos, labels=node_labels, ax=axes[2], edgelist=[])
-        draw_networkx_edge_attr(dataset.source_graph, node_pos, edge_flow, ax=axes[2], cmap="viridis")
+        axes[1].set_title("Flow (Estimated)")
+        nx.draw(dataset.source_graph, node_pos, labels=node_labels, ax=axes[1], edgelist=[])
+        draw_networkx_edge_attr(dataset.source_graph, node_pos, edge_flow, ax=axes[1], cmap="viridis")
 
         fig.savefig("/tmp/test_rl_tutorial_dataset.png")
